@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+    <title>FMCW radar target classification with a CNN :: JT Blog</title>
+  
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A shallow CNN implementation to classify targets from the range-Doppler map of a FMCW radar" />
+<meta name="keywords" content="cnn, convolutional neural network, fmcw radar, range-Doppler map, pytorch" />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="/posts/radar-doppler/" />
+
+
+
+
+<link rel="stylesheet" href="/assets/style.css">
+
+  <link rel="stylesheet" href="/assets/green.css">
+
+
+
+
+
+
+<link rel="apple-touch-icon" href="/img/apple-touch-icon-192x192.png">
+
+  <link rel="shortcut icon" href="/img/favicon/green.png">
+
+
+
+<meta name="twitter:card" content="summary" />
+
+  
+    <meta name="twitter:site" content="" />
+  
+    <meta name="twitter:creator" content="" />
+
+
+
+<meta property="og:locale" content="en" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="FMCW radar target classification with a CNN">
+<meta property="og:description" content="A shallow CNN implementation to classify targets from the range-Doppler map of a FMCW radar" />
+<meta property="og:url" content="/posts/radar-doppler/" />
+<meta property="og:site_name" content="JT Blog" />
+
+  <meta property="og:image" content="/">
+
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1024">
+
+
+  <meta property="article:published_time" content="2022-09-10 15:06:40 &#43;0200 CEST" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</head>
+<body class="green">
+
+
+<div class="container center headings--one-size">
+
+  <header class="header">
+  <div class="header__inner">
+    <div class="header__logo">
+      <a href="/">
+  <div class="logo">
+    JT Blog
+  </div>
+</a>
+
+    </div>
+    
+  </div>
+  
+</header>
+
+
+  <div class="content">
+    
+<div class="post">
+  <h1 class="post-title">
+    <a href="/posts/radar-doppler/">FMCW radar target classification with a CNN</a></h1>
+  <div class="post-meta">
+    
+      <span class="post-date">
+        2022-09-10
+        
+      </span>
+    
+    
+      <span class="post-author">:: Javier Trujillo Rodriguez</span>
+    
+    
+  </div>
+
+  
+  <span class="post-tags">
+    
+    #<a href="/tags/cnn/">cnn</a>&nbsp;
+    
+    #<a href="/tags/radar/">radar</a>&nbsp;
+    
+    #<a href="/tags/pytorch/">pytorch</a>&nbsp;
+    
+  </span>
+  
+  
+
+
+  
+
+  <div class="post-content"><div>
+        <h1 id="introduction">Introduction<a href="#introduction" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>Frequency-Modulated Continuous-Wave (FMCW) radar is a type of radar sensor capable of determining the target distance and speed by comparing the transmitted signal with the one reflected.</p>
+<p>In a nutshell, the radar processor performs two consecutive Fast Fourier Transform (FFT) over the received signal to compute the <strong>range-Doppler map</strong> of the illuminated area. After a square-law detector, each range-Doppler map cell represents the presence of a potential target lying at the corresponding cell range and Doppler frequency which can be used to compute its speed. If the cell value is greater than a threshold (computed to ensure a constant Probability of False Alarm) a target is detected at that cell.</p>
+<p>In modern systems, it is often required not only to detect a target but to automatically classify it. To this end, several approaches have been developed using multiple radar features such as the target micro-Doppler signature. However, in this post we will explore the use of a Convolutional Neural Network (CNN) to classify targets using only the information provided by the FMCW range-Doppler map.</p>
+<p>You can find the complete code for this post here:</p>
+<p><a href="https://github.com/trujilloRJ/fmcw_radar_cnn">https://github.com/trujilloRJ/fmcw_radar_cnn</a></p>
+<h1 id="dataset">Dataset<a href="#dataset" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>We will use the <strong>Real Doppler RAD-DAR database</strong> available in Kaggle at:</p>
+<p><a href="https://www.kaggle.com/datasets/iroldan/real-doppler-raddar-database">https://www.kaggle.com/datasets/iroldan/real-doppler-raddar-database</a></p>
+<p>Additional details about the radar system and the adquisition and labeling process can be found in the original paper at:</p>
+<p><a href="https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307">https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307</a></p>
+<p>The dataset contains <code>11x61</code> matrices representing the range-Doppler map cells surrounding a detected target. Three classes are represented in the dataset: <code>Drones</code>, <code>Cars</code>, and <code>People</code>. Hence, our purpose is to train a CNN that accurately classify the target into one of the three classes based on the <code>11x61</code> range-Doppler cells matrix.</p>
+<h1 id="data-exploration">Data exploration<a href="#data-exploration" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<h2 id="1-loading-data">1. Loading data<a href="#1-loading-data" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>First, we need to load the data. The dataset is divided into folders that contains the matrices corresponding to each class stored as <code>.csv</code> files.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> os
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> numpy <span style="color:#66d9ef">as</span> np
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> pandas <span style="color:#66d9ef">as</span> pd
+</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> matplotlib.pyplot <span style="color:#66d9ef">as</span> plt 
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>DIR <span style="color:#f92672">=</span> os<span style="color:#f92672">.</span>path<span style="color:#f92672">.</span>abspath(<span style="color:#e6db74">&#39;./dataset&#39;</span>)
+</span></span><span style="display:flex;"><span>LABEL_MAPPER <span style="color:#f92672">=</span> {<span style="color:#e6db74">&#39;Cars&#39;</span>: <span style="color:#ae81ff">0</span>, <span style="color:#e6db74">&#39;Drones&#39;</span>: <span style="color:#ae81ff">1</span>, <span style="color:#e6db74">&#39;People&#39;</span>: <span style="color:#ae81ff">2</span>}
+</span></span><span style="display:flex;"><span>INV_LABEL_MAPPER <span style="color:#f92672">=</span> {v: k <span style="color:#66d9ef">for</span> k, v <span style="color:#f92672">in</span> LABEL_MAPPER<span style="color:#f92672">.</span>items()}
+</span></span><span style="display:flex;"><span>DEVICE <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>device(<span style="color:#e6db74">&#39;cuda:0&#39;</span> <span style="color:#66d9ef">if</span> torch<span style="color:#f92672">.</span>cuda<span style="color:#f92672">.</span>is_available() <span style="color:#66d9ef">else</span> <span style="color:#e6db74">&#39;cpu&#39;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_data_for_label</span>(label: str):
+</span></span><span style="display:flex;"><span>    X, y <span style="color:#f92672">=</span> [], []
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> root, dirs, files <span style="color:#f92672">in</span> os<span style="color:#f92672">.</span>walk(os<span style="color:#f92672">.</span>path<span style="color:#f92672">.</span>join(DIR, label)):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> file <span style="color:#f92672">in</span> files:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> file<span style="color:#f92672">.</span>endswith(<span style="color:#e6db74">&#39;.csv&#39;</span>):
+</span></span><span style="display:flex;"><span>                y<span style="color:#f92672">.</span>append(LABEL_MAPPER[label])
+</span></span><span style="display:flex;"><span>                df <span style="color:#f92672">=</span> pd<span style="color:#f92672">.</span>read_csv(os<span style="color:#f92672">.</span>path<span style="color:#f92672">.</span>join(root, file), sep<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;,&#39;</span>, header<span style="color:#f92672">=</span><span style="color:#66d9ef">None</span>)
+</span></span><span style="display:flex;"><span>                X<span style="color:#f92672">.</span>append(df<span style="color:#f92672">.</span>values)
+</span></span><span style="display:flex;"><span>    print(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;Loaded </span><span style="color:#e6db74">{</span>len(y)<span style="color:#e6db74">}</span><span style="color:#e6db74"> examples for label </span><span style="color:#e6db74">{</span>label<span style="color:#e6db74">}</span><span style="color:#e6db74"> encoded with </span><span style="color:#e6db74">{</span>LABEL_MAPPER[label]<span style="color:#e6db74">}</span><span style="color:#e6db74">&#39;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> X, y
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>X_cars, y_cars <span style="color:#f92672">=</span> get_data_for_label(<span style="color:#e6db74">&#39;Cars&#39;</span>)
+</span></span><span style="display:flex;"><span>X_drones, y_drones <span style="color:#f92672">=</span> get_data_for_label(<span style="color:#e6db74">&#39;Drones&#39;</span>)
+</span></span><span style="display:flex;"><span>X_people, y_people <span style="color:#f92672">=</span> get_data_for_label(<span style="color:#e6db74">&#39;People&#39;</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>X <span style="color:#f92672">=</span> X_cars <span style="color:#f92672">+</span> X_drones <span style="color:#f92672">+</span> X_people
+</span></span><span style="display:flex;"><span>y <span style="color:#f92672">=</span> y_cars <span style="color:#f92672">+</span> y_drones <span style="color:#f92672">+</span> y_people
+</span></span><span style="display:flex;"><span>X, y <span style="color:#f92672">=</span> np<span style="color:#f92672">.</span>array(X), np<span style="color:#f92672">.</span>array(y)
+</span></span></code></pre></div><p>In the above code, after loading the data we arranged the feature matrices into <code>X</code> and the encoded classes into <code>y</code>.</p>
+<h2 id="2-data-inspection">2. Data inspection<a href="#2-data-inspection" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>First, let&rsquo;s check if the dataset is imbalanced by seeing the number of examples corresponding to each class.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span>fig, ax <span style="color:#f92672">=</span> plt<span style="color:#f92672">.</span>subplots()
+</span></span><span style="display:flex;"><span>ax<span style="color:#f92672">.</span>bar([<span style="color:#e6db74">&#39;Cars&#39;</span>, <span style="color:#e6db74">&#39;Drones&#39;</span>, <span style="color:#e6db74">&#39;People&#39;</span>], [len(x) <span style="color:#66d9ef">for</span> x <span style="color:#f92672">in</span> [y_cars, y_drones, y_people]])
+</span></span><span style="display:flex;"><span>ax<span style="color:#f92672">.</span>set_title(<span style="color:#e6db74">&#39;Class distribution&#39;</span>)
+</span></span></code></pre></div><img src="/posts/images/class_distribution.png" width="600px" />
+<p>From the figure, there are:</p>
+<ul>
+<li><code>5720</code> examples of cars</li>
+<li><code>5065</code> examples of drones</li>
+<li><code>6700</code> examples of people</li>
+</ul>
+<p>For a total of <code>17485</code> examples. In addition, all classes are approximately equally represented, hence we don&rsquo;t need to worry about dataset imbalance. This allow us to safely use the prediciton <strong>accuracy</strong> as a metric to measure our model performance.</p>
+<p>Now, let&rsquo;s visualize individual class examples to see if we can gain more insight of the data.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#f92672">import</span> itertools
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>fig, axs <span style="color:#f92672">=</span> plt<span style="color:#f92672">.</span>subplots(<span style="color:#ae81ff">3</span>, <span style="color:#ae81ff">3</span>, figsize<span style="color:#f92672">=</span>(<span style="color:#ae81ff">10</span>, <span style="color:#ae81ff">10</span>))
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">for</span> i, j <span style="color:#f92672">in</span> itertools<span style="color:#f92672">.</span>product(range(<span style="color:#ae81ff">3</span>), range(<span style="color:#ae81ff">3</span>)):
+</span></span><span style="display:flex;"><span>    index <span style="color:#f92672">=</span> np<span style="color:#f92672">.</span>random<span style="color:#f92672">.</span>randint(<span style="color:#ae81ff">0</span>, len(y)<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>    img <span style="color:#f92672">=</span> axs[i, j]<span style="color:#f92672">.</span>imshow(X[index], cmap<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;jet&#39;</span>, vmin<span style="color:#f92672">=-</span><span style="color:#ae81ff">140</span>, vmax<span style="color:#f92672">=-</span><span style="color:#ae81ff">70</span>)
+</span></span><span style="display:flex;"><span>    axs[i, j]<span style="color:#f92672">.</span>set_title(<span style="color:#e6db74">f</span><span style="color:#e6db74">&#39;</span><span style="color:#e6db74">{</span>INV_LABEL_MAPPER[y[index]]<span style="color:#e6db74">}</span><span style="color:#e6db74">&#39;</span>)
+</span></span><span style="display:flex;"><span>    axs[i, j]<span style="color:#f92672">.</span>axis(<span style="color:#e6db74">&#39;tight&#39;</span>)
+</span></span></code></pre></div><img src="/posts/images/class_examples.png"/>
+<p>There are a couple of observations that we can made from the previous figure:</p>
+<ul>
+<li>
+<p>Car reflections usually take multiple cells on the y-axis direction which represents the range dimension and few on the x-axis or Doppler dimension. This is expected, since cars are large targets with no moving parts.</p>
+</li>
+<li>
+<p>On the other hand, drone reflections are smaller and with the low power values compared to cars and people. This is also expected since drones have the smallest Radar-Cross Section (RCS) of the analyzed targets which is directly proportional to the echo power.</p>
+</li>
+<li>
+<p>People reflections are wild 😬! They spread through the Doppler dimension as people move a lots of parts when walking. Take for example the movement of the arms.</p>
+</li>
+<li>
+<p>In addition, people maps have strong side echoes (represented by a red rectangle) that takes the whole range dimension. I suspect that this are clutter echoes corresponding to stationary objects in the environment, as people move relatively slow, their echoes usually appear close to the clutter. In fact, this could serve as an indicator for our model.</p>
+</li>
+</ul>
+<p>Our hope is that our model learn all these differences and correctly classify the targets!</p>
+<h1 id="training">Training<a href="#training" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>We will use <code>pytorch</code> to train and design our model.</p>
+<h2 id="1-creating-custom-dataset-class">1. Creating custom Dataset class<a href="#1-creating-custom-dataset-class" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>To ease the training process we create our own custom <code>Dataset</code> class. In particular, this integrates well with the <code>pytorch</code> data loader which enables several features such as automatic batching.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
+</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> torch.utils.data <span style="color:#f92672">import</span> Dataset, DataLoader
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">MapsDataset</span>(Dataset):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, data, labels):
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>data <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>from_numpy(data)
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>labels <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>from_numpy(labels)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __len__(self):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> len(self<span style="color:#f92672">.</span>data)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __getitem__(self, index):
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>data[index][<span style="color:#66d9ef">None</span>, :], self<span style="color:#f92672">.</span>labels[index]
+</span></span></code></pre></div><h2 id="2-train-validation-test-splitting">2. Train-validation-test splitting<a href="#2-train-validation-test-splitting" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>Then, we split the dataset in three: <code>training</code>, <code>validation</code>, and <code>test</code>. The training dataset will be used to train our model and update its parameters while the validation data can be used to optimize it. Finally, the test dataset will serve as a final performance measure to our model.</p>
+<p>It is important to prevent overfitting and data leakage that we do not take any decision on our model based on the results of the test dataset. This dataset must represents a real application were the model has not see the examples before, nor for training or optimization.</p>
+<p>Finally, we will use <code>10%</code> of the data for test, <code>20%</code> for validation, and the remaining <code>70%</code> for training.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#f92672">from</span> sklearn.model_selection <span style="color:#f92672">import</span> train_test_split
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>SEED <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span>val_size, test_size <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.2</span>, <span style="color:#ae81ff">0.1</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># train-test split</span>
+</span></span><span style="display:flex;"><span>X_trainval, X_test, y_trainval, y_test <span style="color:#f92672">=</span> train_test_split(
+</span></span><span style="display:flex;"><span>    X, y, test_size<span style="color:#f92672">=</span>test_size, random_state<span style="color:#f92672">=</span>SEED, stratify<span style="color:#f92672">=</span>y
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># train-validation split</span>
+</span></span><span style="display:flex;"><span>X_train, X_val, y_train, y_val <span style="color:#f92672">=</span> train_test_split(
+</span></span><span style="display:flex;"><span>    X_trainval,
+</span></span><span style="display:flex;"><span>    y_trainval,
+</span></span><span style="display:flex;"><span>    test_size<span style="color:#f92672">=</span>val_size <span style="color:#f92672">/</span> (<span style="color:#ae81ff">1</span> <span style="color:#f92672">-</span> test_size),
+</span></span><span style="display:flex;"><span>    random_state<span style="color:#f92672">=</span>SEED,
+</span></span><span style="display:flex;"><span>    stratify<span style="color:#f92672">=</span>y_trainval,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># using custom DataLoader</span>
+</span></span><span style="display:flex;"><span>train_dataset <span style="color:#f92672">=</span> MapsDataset(X_train, y_train)
+</span></span><span style="display:flex;"><span>val_dataset <span style="color:#f92672">=</span> MapsDataset(X_val, y_val)
+</span></span></code></pre></div><h2 id="3-testing-the-first-cnn">3. Testing the first CNN<a href="#3-testing-the-first-cnn" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>Our first neural networks is inspired by the one proposed in the <a href="https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307">original paper</a>. It has 1 convolutional layer followed by 4 fully connected layers.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.nn <span style="color:#66d9ef">as</span> nn
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Conv1Net</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, k1_size<span style="color:#f92672">=</span>(<span style="color:#ae81ff">3</span>, <span style="color:#ae81ff">3</span>)):
+</span></span><span style="display:flex;"><span>        super(Conv1Net, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># convolutional layer</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>conv1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>Conv2d(<span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">20</span>, kernel_size<span style="color:#f92672">=</span>k1_size),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>ReLU(),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>MaxPool2d(<span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">2</span>),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># fully connected layers</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">116</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">20</span>, <span style="color:#ae81ff">64</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">64</span>, <span style="color:#ae81ff">64</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc3 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">64</span>, <span style="color:#ae81ff">64</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc4 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">64</span>, <span style="color:#ae81ff">3</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc_layers <span style="color:#f92672">=</span> [self<span style="color:#f92672">.</span>fc1, self<span style="color:#f92672">.</span>fc2, self<span style="color:#f92672">.</span>fc3, self<span style="color:#f92672">.</span>fc4]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x):
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>conv1(x)
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>flatten(x, <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> fc <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>fc_layers:
+</span></span><span style="display:flex;"><span>            x <span style="color:#f92672">=</span> fc(x)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span></code></pre></div><p>We train the previous network with the following parameters:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Number of epochs</td>
+<td><code>25</code></td>
+</tr>
+<tr>
+<td>Learning rate ($\eta$)</td>
+<td><code>2e-4</code></td>
+</tr>
+<tr>
+<td>Batch size</td>
+<td><code>32</code></td>
+</tr>
+<tr>
+<td>Optimizer</td>
+<td><code>Adam (torch.optim.Adam)</code></td>
+</tr>
+<tr>
+<td>Loss function</td>
+<td><code>Cross-entropy (torch.nn.CrossEntropyLoss())</code></td>
+</tr>
+</tbody>
+</table>
+<p>The training is easily done using the utility function <code>train_model()</code> that can be found in the REPO!!!! The results obtained are:</p>
+<img src="/posts/images/conv1_results.png" height=700/>
+<p>From the figure we can see that the model starts with high accuracy both for the training and validation set. As the number of epochs increases the train loss reduces while the train accuracy grows. However, the validation loss significantly increases.</p>
+<p>In fact, when the training finishes the model present a performance gap between the training (<code>0.995</code>) and validation (~<code>0.921</code>) accuracy. This is a clear sign that the model is overfitting the data.</p>
+<p>Overfitting is a well known problem in Deep Learning and a number of regularization strategies to reduce it have been proposed such as <strong>dropout</strong>, <strong>early-stopping</strong>, <strong>weight regularization</strong> among others. Check this article for an exhaustive analysis of regularization techniques: <a href="https://arxiv.org/abs/1710.10686">https://arxiv.org/abs/1710.10686</a></p>
+<p>In this post, we will focus on one strategy which is reducing the model complexity. Why? Let&rsquo;s start by looking at a model summary of <code>Conv1Net</code></p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#f92672">from</span> torchsummary <span style="color:#f92672">import</span> summary
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># here model is Conv1Net instance</span>
+</span></span><span style="display:flex;"><span>summary(model, input_size<span style="color:#f92672">=</span>(<span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">11</span>, <span style="color:#ae81ff">61</span>))
+</span></span></code></pre></div><img src="/posts/images/conv1_summary.PNG" width=550/>
+<ul>
+<li>
+<p>First, we can see that our model has around <code>157K</code> parameters! This is a lot considering that the number of examples in our data is around <code>17K</code>. This might suggest that a simpler model could also be able to learn the representations and pattern on the data.</p>
+</li>
+<li>
+<p>Second, the estimated total size of the model is around <code>800 KB</code>. Since we are thinking on deploying our net in a FMCW radar system, the memory size could be limited specially if a FPGA-based architecture is used. Therefore, this is an additional motivation to explore a simpler model with less parameters.</p>
+</li>
+</ul>
+<h2 id="4-simplifying-the-model">4. Simplifying the model<a href="#4-simplifying-the-model" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>The summary shows that the convolutional layers have much less parameters than the first three fully connected layers. Since we want to reduce the number of parameters, a basic idea could be to add a convolutional layer while cutting a fully connected one. The new CNN is defined:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-Python" data-lang="Python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Conv2Net</span>(nn<span style="color:#f92672">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> __init__(self, k1_size<span style="color:#f92672">=</span>(<span style="color:#ae81ff">3</span>, <span style="color:#ae81ff">3</span>), k2_size<span style="color:#f92672">=</span>(<span style="color:#ae81ff">3</span>, <span style="color:#ae81ff">3</span>)):
+</span></span><span style="display:flex;"><span>        super(Conv2Net, self)<span style="color:#f92672">.</span>__init__()
+</span></span><span style="display:flex;"><span>        
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># convolutional layers</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>conv1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>Conv2d(<span style="color:#ae81ff">1</span>, <span style="color:#ae81ff">10</span>, kernel_size<span style="color:#f92672">=</span>k1_size),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>ReLU(),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>MaxPool2d(<span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">2</span>),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>conv2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>Conv2d(<span style="color:#ae81ff">10</span>, <span style="color:#ae81ff">20</span>, kernel_size<span style="color:#f92672">=</span>k2_size),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>ReLU(),
+</span></span><span style="display:flex;"><span>            nn<span style="color:#f92672">.</span>MaxPool2d(<span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">2</span>),
+</span></span><span style="display:flex;"><span>        )
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># fully connected layers</span>
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc1 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">20</span> <span style="color:#f92672">*</span> <span style="color:#ae81ff">13</span>, <span style="color:#ae81ff">64</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc2 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">64</span>, <span style="color:#ae81ff">64</span>), nn<span style="color:#f92672">.</span>ReLU())
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc3 <span style="color:#f92672">=</span> nn<span style="color:#f92672">.</span>Sequential(nn<span style="color:#f92672">.</span>Linear(<span style="color:#ae81ff">64</span>, <span style="color:#ae81ff">3</span>, nn<span style="color:#f92672">.</span>ReLU()))
+</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>fc_layers<span style="color:#f92672">=</span> [self<span style="color:#f92672">.</span>fc1, self<span style="color:#f92672">.</span>fc2, self<span style="color:#f92672">.</span>fc3]
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x):
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>conv2(self<span style="color:#f92672">.</span>conv1(x))
+</span></span><span style="display:flex;"><span>        x <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>flatten(x, <span style="color:#ae81ff">1</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> fc <span style="color:#f92672">in</span> self<span style="color:#f92672">.</span>fc_layers:
+</span></span><span style="display:flex;"><span>            x <span style="color:#f92672">=</span> fc(x)
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> x
+</span></span></code></pre></div><p>We train the new CNN with the same parameters as before obtaining the following results:</p>
+<img src="/posts/images/conv_results.png" width=700/>
+<p>Nice! It can be seen how both training and validation losses decrease on each iteration. Moreover, we have successfully reduce the gap between the training (<code>0.965</code>) and validation (<code>0.941</code>) accuracy. Moreover, the validation accuracy is higher than the one obtained for the first model <code>Conv1Net</code>.</p>
+<p>Finally, let&rsquo;s check the new model summary:</p>
+<img src="/posts/images/conv2_summary.PNG" width=550/>
+<p>We reduce the number of parameters from <code>173K</code> to <code>23K</code> and the model size from <code>800 KB</code> to <code>200 KB</code>. All this while improving generalization and obtaining a higher performance on the validation data.</p>
+<p>Finally, when applying the model to the test data we obtain a nice: <code>94 %</code> accuracy.</p>
+<h1 id="conclusions">Conclusions<a href="#conclusions" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<ul>
+<li>
+<p>We trained a CNN for target classification in a FMCW radar system taking as input the range-Doppler map.</p>
+</li>
+<li>
+<p>We have improved regularization by reducing the model complexity.</p>
+</li>
+<li>
+<p>The final trained model can achieve an accuracy of about <code>94 %</code> on unseen data.</p>
+</li>
+<li>
+<p>We managed to keep the model size to around <code>200 KB</code> which could be essential for a real-time deployment on FPGA-based architectures.</p>
+</li>
+</ul>
+<h1 id="future-steps-and-remaining-questions">Future steps and remaining questions<a href="#future-steps-and-remaining-questions" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<ol>
+<li>
+<p>Optimize the model by trying different learning rates, batch sizes and other hyperparameters. Use learning rate decay?</p>
+</li>
+<li>
+<p>Extend the training to more epochs. It seems like the model can still learn a little if we increase the number of epochs.</p>
+</li>
+<li>
+<p>Can we further simplify the model without losing learning capacity?</p>
+</li>
+<li>
+<p>Try data augmentation techniques such as adding gaussian noise to the maps.</p>
+</li>
+<li>
+<p>When the model fails? See the worst classification examples.</p>
+</li>
+</ol>
+
+      </div></div>
+
+  
+  
+  
+
+  
+  
+
+  
+</div>
+
+  </div>
+
+  
+    <footer class="footer">
+  <div class="footer__inner">
+    
+      <div class="copyright">
+        <span>© 2022 Powered by <a href="http://gohugo.io">Hugo</a></span>
+    
+        
+      </div>
+  </div>
+</footer>
+
+<script src="/assets/main.js"></script>
+<script src="/assets/prism.js"></script>
+
+
+
+
+
+
+
+  
+</div>
+
+</body>
+</html>
