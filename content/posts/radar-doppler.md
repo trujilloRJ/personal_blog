@@ -17,9 +17,9 @@ math = false
 
 Frequency-Modulated Continuous-Wave (FMCW) radar is a type of radar sensor capable of determining the target distance and speed by comparing the transmitted signal with the one reflected. 
 
-In a nutshell, the radar processor performs two consecutive Fast Fourier Transform (FFT) over the received signal to compute the **range-Doppler map** of the illuminated area. After a square-law detector, each range-Doppler map cell represents the presence of a potential target lying at the corresponding cell range and Doppler frequency which can be used to compute its speed. If the cell value is greater than a threshold (computed to ensure a constant Probability of False Alarm) a target is detected at that cell.
+In a nutshell, the radar processor performs two consecutive Fast Fourier Transform (FFT) over the received signal to compute the **range-Doppler map** of the illuminated area. After a square-law detector, each range-Doppler map cell represents the presence of a potential target lying at the corresponding cell range and Doppler frequency which can be used to estimate its speed. If the cell value is greater than a threshold (computed to ensure a constant Probability of False Alarm) a target is detected at that cell.
 
-In modern systems, it is often required not only to detect a target but to automatically classify it. To this end, several approaches have been developed using multiple radar features such as the target micro-Doppler signature. However, in this post, we will explore the use of a Convolutional Neural Network (CNN) to classify targets using only the information provided by the FMCW range-Doppler map.
+In modern systems, it is often required not only to detect a target but to automatically classify it. To this end, several approaches have been developed using multiple radar features such as the target micro-Doppler signature. However, in this post, we will explore the use of a Convolutional Neural Network (CNN) to classify targets using only the information provided by the range-Doppler map.
 
 You can find the complete code for this post here:
 
@@ -43,7 +43,7 @@ The dataset contains ``11x61`` matrices representing the range-Doppler map cells
 
 First, we need to load the data. The dataset is divided into folders that contain the matrices corresponding to each class stored as `.csv` files. 
 
-```python
+{{< code language="Python" title="Loading data" expand="Show" collapse="Hide" isCollapsed="false" >}}
 import os
 import numpy as np
 import pandas as pd
@@ -72,7 +72,7 @@ X_people, y_people = get_data_for_label('People')
 X = X_cars + X_drones + X_people
 y = y_cars + y_drones + y_people
 X, y = np.array(X), np.array(y)
-```
+{{< /code >}}
 
 In the above code, after loading the data we arranged the feature matrices into `X` and the encoded classes into `y`.
 
@@ -80,13 +80,13 @@ In the above code, after loading the data we arranged the feature matrices into 
 
 First, let's check if the dataset is imbalanced by seeing the number of examples corresponding to each class.
 
-```Python
+{{< code language="Python" title="" expand="Show" collapse="Hide" isCollapsed="false" >}}
 fig, ax = plt.subplots()
 ax.bar(['Cars', 'Drones', 'People'], [len(x) for x in [y_cars, y_drones, y_people]])
 ax.set_title('Class distribution')
-```
+{{< /code >}}
 
-<img src="/posts/images/class_distribution.png" width="600px" />
+{{< image src="/posts/images/class_distribution.png" alt="Class distribution" position="center" style="border-radius: 8px; width: 600px" >}}
 
 From the figure, there are:
 
@@ -98,7 +98,7 @@ For a total of ``17485`` examples. In addition, all classes are approximately eq
 
 Now, let's visualize individual class examples to see if we can gain more insight into the data. 
 
-```Python
+{{< code language="Python" title="Visualizing data examples" expand="Show" collapse="Hide" isCollapsed="false" >}}
 import itertools
 
 fig, axs = plt.subplots(3, 3, figsize=(10, 10))
@@ -107,21 +107,21 @@ for i, j in itertools.product(range(3), range(3)):
     img = axs[i, j].imshow(X[index], cmap='jet', vmin=-140, vmax=-70)
     axs[i, j].set_title(f'{INV_LABEL_MAPPER[y[index]]}')
     axs[i, j].axis('tight')
-```
+{{< /code >}}
 
-<img src="/posts/images/class_examples.png"/>
+{{< image src="/posts/images/class_examples.png" alt="Class distribution" position="center" style="border-radius: 8px;" >}}
 
 There are a couple of observations that we can make from the previous figure:
 
 - Car reflections usually take multiple cells on the y-axis direction which represents the range dimension and few on the x-axis or Doppler dimension. This is expected since cars are large targets with no moving parts.
 
-- On the other hand, drone reflections are smaller and the low power values compared to cars and people. This is also expected since drones have the smallest Radar-Cross Section (RCS) of the analyzed targets which is directly proportional to the echo power.
+- On the other hand, drone reflections are smaller and have low power values compared to cars and people. This is also expected since drones have the smallest Radar-Cross Section (RCS) of the analyzed targets which is directly proportional to the echo power.
 
-- People's reflections are wild 😬! They spread through the Doppler dimension as people move lots of parts when walking. Take for example the movement of the arms. 
+- People's reflections are wild 😬! They spread through the Doppler dimension as we a move lots of parts when walking. Take for example the movement of the arms. 
 
-- In addition, people's maps have strong side echoes (represented by a red rectangle) that take the whole range dimension. I suspect that these are clutter echoes corresponding to stationary objects in the environment, as people move relatively slowly, their echoes usually appear close to the clutter. In fact, this could serve as an indicator for our model.
+- In addition, people's maps have strong side echoes (represented by a red rectangle) that take the whole range dimension. I suspect that these are clutter echoes corresponding to stationary objects in the environment, as people move relatively slowly, their echoes usually appear near the clutter. In fact, this could serve as an indicator for our model.
 
-Our hope is that our model learns all these differences and correctly classifies the targets!
+Our hope is that the model learns all these differences and correctly classifies the targets!
 
 
 # Training
@@ -132,7 +132,7 @@ We will use `PyTorch` to train and design our model.
 
 To ease the training process we create our own custom ``Dataset`` class. In particular, this integrates well with the `PyTorch` data loader which enables several features such as automatic batching.
 
-```Python
+{{< code language="Python" title="Custom dataset" expand="Show" collapse="Hide" isCollapsed="false" >}}
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -146,7 +146,7 @@ class MapsDataset(Dataset):
 
     def __getitem__(self, index):
         return self.data[index][None, :], self.labels[index]
-```
+{{< /code >}}
 
 ## 2. Train-validation-test splitting
 
@@ -156,7 +156,7 @@ It is important to prevent overfitting and data leakage that we do not take any 
 
 Finally, we will use ``10%`` of the data for test, `20%` for validation, and the remaining `70%` for training.
 
-```Python
+{{< code language="Python" title="Dataset splitting" expand="Show" collapse="Hide" isCollapsed="false" >}}
 from sklearn.model_selection import train_test_split
 
 SEED = 0
@@ -179,13 +179,13 @@ X_train, X_val, y_train, y_val = train_test_split(
 # using custom DataLoader
 train_dataset = MapsDataset(X_train, y_train)
 val_dataset = MapsDataset(X_val, y_val)
-```
+{{< /code >}}
 
 ## 3. Testing the first CNN
 
 Our first neural network is inspired by the one proposed in the [original paper](https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307). It has 1 convolutional layer followed by 4 fully connected layers. 
 
-```Python
+{{< code language="Python" title="Conv1Net" expand="Show" collapse="Hide" isCollapsed="false" >}}
 import torch.nn as nn
 
 class Conv1Net(nn.Module):
@@ -212,21 +212,22 @@ class Conv1Net(nn.Module):
         for fc in self.fc_layers:
             x = fc(x)
         return x
-```
+{{< /code >}}
 
 We train the previous network with the following parameters:
 
 | Parameter   | Value       |
 | ----------- | ----------- |
 | Number of epochs      | `25`       |
-| Learning rate ($\eta$)   | `2e-4`        |
+| Learning rate   | `2e-4`        |
 | Batch size   | `32`        |
 | Optimizer   | `Adam (torch.optim.Adam)`        |
 | Loss function   | `Cross-entropy (torch.nn.CrossEntropyLoss())`        |
 
-The training is easily done using the utility function `train_model()` that can be found in the REPO!!!! The results obtained are: 
+The training is easily done using the utility function `train_model()` that can be found in the [repo](https://github.com/trujilloRJ/fmcw_radar_cnn). The results obtained are: 
 
-<img src="/posts/images/conv1_results.png" height=700/>
+{{< image src="/posts/images/conv1_results.png" alt="Class distribution" position="center" style="border-radius: 8px; height: 500px;">}}
+<!-- <img src="/posts/images/conv1_results.png" height=700/> -->
 
 From the figure, we can see that the model starts with high accuracy both for the training and validation set. As the number of epochs increases the training loss reduces while the training accuracy grows. However, the validation loss significantly increases.
 
@@ -243,7 +244,7 @@ from torchsummary import summary
 summary(model, input_size=(1, 11, 61))
 ```
 
-<img src="/posts/images/conv1_summary.PNG" width=550/>
+{{< image src="/posts/images/conv1_summary.PNG" alt="Class distribution" position="center" style="border-radius: 8px; width: 550px;">}}
 
 - First, we can see that our model has around `157K` parameters! This is a lot considering that the number of examples in our data is around `17K`. This might suggest that a simpler model could also be able to learn the representations and patterns of the data.
 
@@ -253,7 +254,7 @@ summary(model, input_size=(1, 11, 61))
 
 The summary shows that the convolutional layers have much fewer parameters than the first three fully connected layers. Since we want to reduce the number of parameters, a basic idea could be to add a convolutional layer while cutting a fully connected one. The new CNN is defined:
 
-```Python
+{{< code language="Python" title="Conv2Net" expand="Show" collapse="Hide" isCollapsed="false" >}}
 class Conv2Net(nn.Module):
     def __init__(self, k1_size=(3, 3), k2_size=(3, 3)):
         super(Conv2Net, self).__init__()
@@ -282,17 +283,17 @@ class Conv2Net(nn.Module):
         for fc in self.fc_layers:
             x = fc(x)
         return x
-```
+{{< /code >}}
 
 We train the new CNN with the same parameters as before obtaining the following results:
 
-<img src="/posts/images/conv_results.png" width=700/>
+{{< image src="/posts/images/conv_results.png" alt="Class distribution" position="center" style="border-radius: 8px; width: 500px;">}}
 
 Nice! It can be seen how both training and validation losses decrease on each iteration. Moreover, we have successfully reduced the gap between the training (`0.965`) and validation (`0.941`) accuracy. Moreover, the validation accuracy is higher than the one obtained for the first model `Conv1Net`.
 
 Finally, let's check the new model summary:
 
-<img src="/posts/images/conv2_summary.PNG" width=550/>
+{{< image src="/posts/images/conv2_summary.PNG" alt="Class distribution" position="center" style="border-radius: 8px; width: 550px;">}}
 
 We reduce the number of parameters from `173K` to `23K` and the model size from `800 KB` to `200 KB`. All this while improving generalization and obtaining a higher performance on the validation data.
 
