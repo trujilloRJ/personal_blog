@@ -4,8 +4,8 @@ date = "2022-09-10T15:06:40+02:00"
 author = "Javier Trujillo Rodriguez"
 authorTwitter = "" #do not include @
 cover = ""
-tags = ["cnn", "radar", "pytorch"]
-keywords = ["cnn", "convolutional neural network", "fmcw radar", "range-Doppler map", "pytorch"]
+tags = ["cnn", "radar", "PyTorch"]
+keywords = ["cnn", "convolutional neural network", "fmcw radar", "range-Doppler map", "PyTorch"]
 description = "A shallow CNN implementation to classify targets from the range-Doppler map of a FMCW radar"
 showFullContent = false
 readingTime = false
@@ -19,7 +19,7 @@ Frequency-Modulated Continuous-Wave (FMCW) radar is a type of radar sensor capab
 
 In a nutshell, the radar processor performs two consecutive Fast Fourier Transform (FFT) over the received signal to compute the **range-Doppler map** of the illuminated area. After a square-law detector, each range-Doppler map cell represents the presence of a potential target lying at the corresponding cell range and Doppler frequency which can be used to compute its speed. If the cell value is greater than a threshold (computed to ensure a constant Probability of False Alarm) a target is detected at that cell.
 
-In modern systems, it is often required not only to detect a target but to automatically classify it. To this end, several approaches have been developed using multiple radar features such as the target micro-Doppler signature. However, in this post we will explore the use of a Convolutional Neural Network (CNN) to classify targets using only the information provided by the FMCW range-Doppler map.
+In modern systems, it is often required not only to detect a target but to automatically classify it. To this end, several approaches have been developed using multiple radar features such as the target micro-Doppler signature. However, in this post, we will explore the use of a Convolutional Neural Network (CNN) to classify targets using only the information provided by the FMCW range-Doppler map.
 
 You can find the complete code for this post here:
 
@@ -31,7 +31,7 @@ We will use the **Real Doppler RAD-DAR database** available in Kaggle at:
 
 https://www.kaggle.com/datasets/iroldan/real-doppler-raddar-database
 
-Additional details about the radar system and the adquisition and labeling process can be found in the original paper at: 
+Additional details about the radar system and the acquisition and labeling process can be found in the original paper at: 
 
 https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307
 
@@ -41,7 +41,7 @@ The dataset contains ``11x61`` matrices representing the range-Doppler map cells
 
 ## 1. Loading data
 
-First, we need to load the data. The dataset is divided into folders that contains the matrices corresponding to each class stored as `.csv` files. 
+First, we need to load the data. The dataset is divided into folders that contain the matrices corresponding to each class stored as `.csv` files. 
 
 ```python
 import os
@@ -94,9 +94,9 @@ From the figure, there are:
 - ``5065`` examples of drones
 - ``6700`` examples of people
 
-For a total of ``17485`` examples. In addition, all classes are approximately equally represented, hence we don't need to worry about dataset imbalance. This allow us to safely use the prediciton **accuracy** as a metric to measure our model performance.
+For a total of ``17485`` examples. In addition, all classes are approximately equally represented, hence we don't need to worry about dataset imbalance. This allows us to safely use the prediction **accuracy** as a metric to measure our model performance.
 
-Now, let's visualize individual class examples to see if we can gain more insight of the data. 
+Now, let's visualize individual class examples to see if we can gain more insight into the data. 
 
 ```Python
 import itertools
@@ -111,26 +111,26 @@ for i, j in itertools.product(range(3), range(3)):
 
 <img src="/posts/images/class_examples.png"/>
 
-There are a couple of observations that we can made from the previous figure:
+There are a couple of observations that we can make from the previous figure:
 
-- Car reflections usually take multiple cells on the y-axis direction which represents the range dimension and few on the x-axis or Doppler dimension. This is expected, since cars are large targets with no moving parts.
+- Car reflections usually take multiple cells on the y-axis direction which represents the range dimension and few on the x-axis or Doppler dimension. This is expected since cars are large targets with no moving parts.
 
-- On the other hand, drone reflections are smaller and with the low power values compared to cars and people. This is also expected since drones have the smallest Radar-Cross Section (RCS) of the analyzed targets which is directly proportional to the echo power.
+- On the other hand, drone reflections are smaller and the low power values compared to cars and people. This is also expected since drones have the smallest Radar-Cross Section (RCS) of the analyzed targets which is directly proportional to the echo power.
 
-- People reflections are wild 😬! They spread through the Doppler dimension as people move a lots of parts when walking. Take for example the movement of the arms. 
+- People's reflections are wild 😬! They spread through the Doppler dimension as people move lots of parts when walking. Take for example the movement of the arms. 
 
-- In addition, people maps have strong side echoes (represented by a red rectangle) that takes the whole range dimension. I suspect that this are clutter echoes corresponding to stationary objects in the environment, as people move relatively slow, their echoes usually appear close to the clutter. In fact, this could serve as an indicator for our model.
+- In addition, people's maps have strong side echoes (represented by a red rectangle) that take the whole range dimension. I suspect that these are clutter echoes corresponding to stationary objects in the environment, as people move relatively slowly, their echoes usually appear close to the clutter. In fact, this could serve as an indicator for our model.
 
-Our hope is that our model learn all these differences and correctly classify the targets!
+Our hope is that our model learns all these differences and correctly classifies the targets!
 
 
 # Training
 
-We will use `pytorch` to train and design our model.
+We will use `PyTorch` to train and design our model.
 
 ## 1. Creating custom Dataset class
 
-To ease the training process we create our own custom ``Dataset`` class. In particular, this integrates well with the `pytorch` data loader which enables several features such as automatic batching.
+To ease the training process we create our own custom ``Dataset`` class. In particular, this integrates well with the `PyTorch` data loader which enables several features such as automatic batching.
 
 ```Python
 import torch
@@ -150,9 +150,9 @@ class MapsDataset(Dataset):
 
 ## 2. Train-validation-test splitting
 
-Then, we split the dataset in three: `training`, ``validation``, and ``test``. The training dataset will be used to train our model and update its parameters while the validation data can be used to optimize it. Finally, the test dataset will serve as a final performance measure to our model. 
+Then, we split the dataset into three: `training`, ``validation``, and ``test``. The training dataset will be used to train our model and update its parameters while the validation data can be used to optimize it. Finally, the test dataset will serve as a final performance measure for our model. 
 
-It is important to prevent overfitting and data leakage that we do not take any decision on our model based on the results of the test dataset. This dataset must represents a real application were the model has not see the examples before, nor for training or optimization.
+It is important to prevent overfitting and data leakage that we do not take any decision on our model based on the results of the test dataset. This dataset must represent a real application where the model has not seen the examples before, nor for training or optimization.
 
 Finally, we will use ``10%`` of the data for test, `20%` for validation, and the remaining `70%` for training.
 
@@ -183,7 +183,7 @@ val_dataset = MapsDataset(X_val, y_val)
 
 ## 3. Testing the first CNN
 
-Our first neural networks is inspired by the one proposed in the [original paper](https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307). It has 1 convolutional layer followed by 4 fully connected layers. 
+Our first neural network is inspired by the one proposed in the [original paper](https://digital-library.theiet.org/content/journals/10.1049/iet-rsn.2019.0307). It has 1 convolutional layer followed by 4 fully connected layers. 
 
 ```Python
 import torch.nn as nn
@@ -228,11 +228,11 @@ The training is easily done using the utility function `train_model()` that can 
 
 <img src="/posts/images/conv1_results.png" height=700/>
 
-From the figure we can see that the model starts with high accuracy both for the training and validation set. As the number of epochs increases the train loss reduces while the train accuracy grows. However, the validation loss significantly increases.
+From the figure, we can see that the model starts with high accuracy both for the training and validation set. As the number of epochs increases the training loss reduces while the training accuracy grows. However, the validation loss significantly increases.
 
-In fact, when the training finishes the model present a performance gap between the training (`0.995`) and validation (~`0.921`) accuracy. This is a clear sign that the model is overfitting the data. 
+In fact, when the training finishes the model presents a performance gap between the training (`0.995`) and validation (~`0.921`) accuracy. This is a clear sign that the model is overfitting the data. 
 
-Overfitting is a well known problem in Deep Learning and a number of regularization strategies to reduce it have been proposed such as **dropout**, **early-stopping**, **weight regularization** among others. Check this article for an exhaustive analysis of regularization techniques: https://arxiv.org/abs/1710.10686 
+Overfitting is a well-known problem in Deep Learning and a number of regularization strategies to reduce it have been proposed such as **dropout**, **early-stopping**, and **weight regularization** among others. Check this article for an exhaustive analysis of regularization techniques: https://arxiv.org/abs/1710.10686 
 
 In this post, we will focus on one strategy which is reducing the model complexity. Why? Let's start by looking at a model summary of `Conv1Net`
 
@@ -245,13 +245,13 @@ summary(model, input_size=(1, 11, 61))
 
 <img src="/posts/images/conv1_summary.PNG" width=550/>
 
-- First, we can see that our model has around `157K` parameters! This is a lot considering that the number of examples in our data is around `17K`. This might suggest that a simpler model could also be able to learn the representations and pattern on the data.
+- First, we can see that our model has around `157K` parameters! This is a lot considering that the number of examples in our data is around `17K`. This might suggest that a simpler model could also be able to learn the representations and patterns of the data.
 
-- Second, the estimated total size of the model is around ``800 KB``. Since we are thinking on deploying our net in a FMCW radar system, the memory size could be limited specially if a FPGA-based architecture is used. Therefore, this is an additional motivation to explore a simpler model with less parameters.
+- Second, the estimated total size of the model is around ``800 KB``. Since we are thinking of deploying our net in an FMCW radar system, the memory size could be limited especially if an FPGA-based architecture is used. Therefore, this is an additional motivation to explore a simpler model with fewer parameters.
 
 ## 4. Simplifying the model
 
-The summary shows that the convolutional layers have much less parameters than the first three fully connected layers. Since we want to reduce the number of parameters, a basic idea could be to add a convolutional layer while cutting a fully connected one. The new CNN is defined:
+The summary shows that the convolutional layers have much fewer parameters than the first three fully connected layers. Since we want to reduce the number of parameters, a basic idea could be to add a convolutional layer while cutting a fully connected one. The new CNN is defined:
 
 ```Python
 class Conv2Net(nn.Module):
@@ -288,7 +288,7 @@ We train the new CNN with the same parameters as before obtaining the following 
 
 <img src="/posts/images/conv_results.png" width=700/>
 
-Nice! It can be seen how both training and validation losses decrease on each iteration. Moreover, we have successfully reduce the gap between the training (`0.965`) and validation (`0.941`) accuracy. Moreover, the validation accuracy is higher than the one obtained for the first model `Conv1Net`.
+Nice! It can be seen how both training and validation losses decrease on each iteration. Moreover, we have successfully reduced the gap between the training (`0.965`) and validation (`0.941`) accuracy. Moreover, the validation accuracy is higher than the one obtained for the first model `Conv1Net`.
 
 Finally, let's check the new model summary:
 
@@ -300,7 +300,7 @@ Finally, when applying the model to the test data we obtain a nice: `94 %` accur
 
 # Conclusions
 
-- We trained a CNN for target classification in a FMCW radar system taking as input the range-Doppler map.
+- We trained a CNN for target classification in an FMCW radar system taking as input the range-Doppler map.
 
 - We have improved regularization by reducing the model complexity.
 
@@ -310,7 +310,7 @@ Finally, when applying the model to the test data we obtain a nice: `94 %` accur
 
 # Future steps and remaining questions
 
-1. Optimize the model by trying different learning rates, batch sizes and other hyperparameters. Use learning rate decay?
+1. Optimize the model by trying different learning rates, batch sizes, and other hyperparameters. Use learning rate decay?
 
 2. Extend the training to more epochs. It seems like the model can still learn a little if we increase the number of epochs.
 
