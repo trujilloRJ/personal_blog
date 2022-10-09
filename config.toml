@@ -2,6 +2,7 @@ baseurl = "/"
 languageCode = "en-us"
 theme = "terminal"
 paginate = 5
+googleAnalytics = 'G-J0MB9PTJJR'
 
 [params]
   # dir name of your main content (default is `content/posts`).
