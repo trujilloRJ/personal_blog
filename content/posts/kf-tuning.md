@@ -48,7 +48,9 @@ This post explore each one of these points by comparing the EKF vs. UKF in a sim
 
 # Motion model and measurement function
 
-We will consider a target whose motion can be modelled with the CTRV. The filter state is defined in polar coordinates as:
+#### CTRV motion model
+
+We will consider a target moving on a 2D-plane whose motion can be modelled with the CTRV. The filter state is represented in Fig. 1 and defined in polar coordinates as:
 
 $$\bold{x_k}=[x_k, y_k, v_k, \phi_k, \omega_k]^T$$
 
@@ -59,14 +61,82 @@ Where the subscript \\(k\\) represents the time index and:
 - \\(v\\) is the target velocity along the direction of the headin,
 - and \\(\omega\\) is the target turn rate which represents the heading rate of change.
 
-This motion model assumes that both the target velocity and turn rate are constant (\\(v\_{k+1} = v_k\\), \\(\omega\_{k+1} = \omega_k\\))
-
 {{< rawhtml >}}
 <image src="/posts/images/02_state.svg" alt="state and measurement model" position="center" style="border-radius: 8px; width: 550px; height: 320px; object-fit: cover; object-position: top;">
 {{< /rawhtml >}}
 Fig.1 Target state with CTRV and sensor measurement.
 
+This motion model assumes that both the target velocity and turn rate are constant, the state transition function can be obtained as:
+
+$$
+\bold{x_{k+1|k}}=f(\bold{x_k})=
+\begin{bmatrix}
+x_k + v_k/\omega_k ( \sin(\phi_k + \omega_kT) - \sin(\phi_k)) \\\
+y_k + v_k/\omega_k ( -\cos(\phi_k + \omega_kT) + \cos(\phi_k)) \\\
+\phi_k + \omega_kT \\\
+v_k \\\
+\omega_k
+\end{bmatrix}
+$$
+
+As can be seen this function is non-linear. This means that if we consider that the state distribution is gaussian at time \\(k\\) after passing it through the function the resulting distribution is no longer gaussian. This violates the assumptions made by the standard KF and if applied it will result in filter divergence. To deal with this, the research community had proposed several solutions, by far the most widely adopted in the industry is the EKF. As mentioned before the implementation of the EKF require the computation of Jacobians for the state transition function, to avoid cluttered the content, it has been defined in the Appendix section.
+
+#### Range and bearing measurement function
+
+As visible in Fig. 1, the sensor provides at each time \\(k\\) the target position by measuring range \\(r^m_k\\) and bearing \\(\theta^m_k\\) defining the measurement:
+
+$$\bold{z_k}=[r^m_k, \theta^m_k]^T$$
+
+However, the track states contains the target position in cartesian coordinates. Therefore, to update the filter state, we need a measurement function that maps between the state space and measurement space:
+
+$$
+\bold{\hat{z}_{k+1}}=h(\bold{x_k})=
+\begin{bmatrix}
+\sqrt{x_k^2 + y_k^2} \\\
+\tan^{-1}({y_k}/{x_k})
+\end{bmatrix}
+$$
+
+It is clear that the measurement function is also non-linear. The Jacobian of this function, required for the EKF, can also be found in the Appendix section.
+
+#### Modelling measurement and process noise
+
+Due to noise, the sensor never provides an exact measurement. The noise is usually modeled as independent random gaussian distributions with zero mean and covariance defined as:
+
+$$
+\bold{R}=
+\begin{bmatrix}
+\sigma^2_r & 0 \\\
+0 & \sigma^2_{\theta}
+\end{bmatrix}
+$$
+
+Where \\(\sigma_r\\) and \\(\sigma\_{\theta}\\) are the noise standard deviation in range and bearing, respectively. These values, are usually intrinsic to the sensor characteristics. For example in FMCW radars, the error in range is related to the range resolution, which in turn depends on the waveform bandwidth.
+
+In addition, we also need to account for errors in our motion model. In practice, no target will move exactly following CTRV, there will be maneuvers and slight path deviations. We modelled this by introducing process noise as zero-mean gaussian distributions to the target velocity \\(q_v\\) and turn rate \\(q\_{\omega}\\). The covariance matrix is obtained as
+
+$$
+\bold{Q_k}= \bold{\Gamma_k}\bold{q}\bold{\Gamma_k^T}
+$$
+
+where \\( \bold{q} = diag([q_v, q_\omega]) \\) and
+
+$$
+\bold{\Gamma_k}=
+\begin{bmatrix}
+\cos(\phi_k)T^2/2 & 0 \\\
+0 & \sin(\phi_k)T^2/ 2 \\\
+0 & T^2/2 \\\
+T & 0 \\\
+0 & T
+\end{bmatrix}
+$$
+
 # EKF and UKF algorithm
+
+#### EKF
+
+#### UKF
 
 ![KF example GIF](/posts/images/KF_example.gif)
 
