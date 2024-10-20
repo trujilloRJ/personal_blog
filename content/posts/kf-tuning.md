@@ -69,7 +69,7 @@ Fig.1 Target state with CTRV and sensor measurement.
 This motion model assumes that both the target velocity and turn rate are constant, the state transition function can be obtained as:
 
 $$
-\bold{x_{k+1|k}}=f(\bold{x_k})=
+\bold{\hat{x}_{k+1}}=f(\bold{x_k})=
 \begin{bmatrix}
 x_k + v_k/\omega_k ( \sin(\phi_k + \omega_kT) - \sin(\phi_k)) \\\
 y_k + v_k/\omega_k ( -\cos(\phi_k + \omega_kT) + \cos(\phi_k)) \\\
@@ -90,7 +90,7 @@ $$\bold{z_k}=[r^m_k, \theta^m_k]^T$$
 However, the track states contains the target position in cartesian coordinates. Therefore, to update the filter state, we need a measurement function that maps between the state space and measurement space:
 
 $$
-\bold{\hat{z}_{k+1}}=h(\bold{x_k})=
+\bold{\hat{z}_{k+1}}=h(\bold{\hat{x}})=
 \begin{bmatrix}
 \sqrt{x_k^2 + y_k^2} \\\
 \tan^{-1}({y_k}/{x_k})
@@ -136,7 +136,44 @@ $$
 
 #### EKF
 
+As mentioned before, the EKF deal with system non-linearities by linerizing them around the current estimate. In practice, the difference with respect to the standard KF is that the matrices used for covariance propagation are the Jacobian of the state transition and measurement function. The EKF cycle can be described by the following equations:
+
+- Prediction:
+  $$ \bold{\hat{x}\_{k+1}}=f(\bold{x_k}) $$
+  $$ \bold{\hat{P}\_{k+1}}=\bold{\dot{F}\_k}\bold{P_k}\bold{\dot{F}^T_k} + \bold{Q_k} $$
+- Update:
+  $$ \bold{\hat{z}_{k+1}} = h(\bold{\hat{x}\_{k+1}}) $$
+
+  $$ \bold{S_k} = \bold{\dot{H}\_k}\bold{\hat{P}\_{k+1}}\bold{\dot{H}^T_k} + \bold{R} $$
+  
+  $$ \bold{K_k} = \bold{\hat{P}\_{k+1}}\bold{\dot{H}^T_k}\bold{S_k}^{-1} $$
+
+  $$ \bold{x_{k+1}} = \bold{\hat{x}\_{k+1}} + \bold{K_k}( \bold{z_{k+1}} - \bold{\hat{z}_{k+1}} )  $$
+
+  $$ \bold{P_{k+1}} = (\bold{I_{n_x}} - \bold{K_k}\bold{\dot{H}\_k})\bold{\hat{P}\_{k+1}} $$
+  
+Where:
+
+- \\( \bold{\dot{F}\_k} \\) and \\( \bold{\dot{H}\_k} \\) are the Jacobian matrices of the state and measurement functions respectively,
+
+- \\( \bold{S_k}  \\) is the innovation covariance,
+
+- \\( \bold{K_k}  \\) is the Kalman gain, 
+
+- and \\( \bold{I_{n_x}} \\) is the identity matrix for the dimension of the state, \\( n_x = 5 \\), in the specific case of CTRV.
+
+An important note is that using the Jacobian, the EKF is aproximating the non-linear function using only the first order term of the Taylor series expansion. Other, more accurate, implementations of the EKF, incorporates higher order terms (REFERENCE) but its implementation is unfeasible for most practical systems.
+
 #### UKF
+
+The UKF tackles nonlinearity in a totally different way. Instead of trying to approximate the non-linear system, it uses a method called the Unscented Transform (UT). This involves picking a set of special points, called sigma points, to represent the spread of possible states. These points are propagated through the non-linear equations, and from the results, the UKF estimates the new mean and covariance based on those transformed points.
+
+Instead of jumping directly into the UKF equations, it is convenient to first state the steps involve in the UT:
+
+1. Generating sigma points:
+
+$$ \mathcal{X_i} $$
+
 
 ![KF example GIF](/posts/images/KF_example.gif)
 
