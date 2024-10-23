@@ -42,7 +42,7 @@ This post explore each one of these points by comparing the EKF vs. UKF in a sim
 1. [Motion model and measurement function](#motion-model-and-measurement-function)
 2. [EKF and UKF algorithm](#ekf-and-ukf-algorithm)
 3. [Implementation](#example2)
-4. [Validation setup](#validation)
+4. [Simulation and validation metrics](#validation)
 5. [Results](#Results)
 6. [Conclusions](#Conclusions)
 
@@ -119,7 +119,7 @@ $$
 \bold{Q_k}= \bold{\Gamma_k}\bold{q}\bold{\Gamma_k^T}
 $$
 
-where \\( \bold{q} = diag([q_v, q_\omega]) \\) and
+where \\( \bold{q} = diag([q_v^2, q_\omega^2]) \\) and
 
 $$
 \bold{\Gamma_k}=
@@ -139,18 +139,21 @@ $$
 As mentioned before, the EKF deal with system non-linearities by linerizing them around the current estimate. In practice, the difference with respect to the standard KF is that the matrices used for covariance propagation are the Jacobian of the state transition and measurement function. The EKF cycle can be described by the following equations:
 
 - Prediction:
-  $$ \bold{\hat{x}\_{k+1}}=f(\bold{x_k}) $$
-  $$ \bold{\hat{P}\_{k+1}}=\bold{\dot{F}\_k}\bold{P_k}\bold{\dot{F}^T_k} + \bold{Q_k} $$
-- Update:
-  $$ \bold{\hat{z}_{k+1}} = h(\bold{\hat{x}\_{k+1}}) $$
+  $$ \bold{\hat{x}_{k+1}}=f(\bold{x_k}) $$
 
-  $$ \bold{S_k} = \bold{\dot{H}\_k}\bold{\hat{P}\_{k+1}}\bold{\dot{H}^T_k} + \bold{R} $$
+  $$ \bold{\hat{P}_{k+1}}=\bold{\dot{F}_k}\bold{P_k}\bold{\dot{F}^T_k} + \bold{Q_k} $$
+
+- Update:
+
+  $$ \bold{\hat{z}\_{k+1}} = h(\bold{\hat{x}_{k+1}}) $$
+
+  $$ \bold{S_k} = \bold{\dot{H}\_k}\bold{\hat{P}_{k+1}}\bold{\dot{H}^T_k} + \bold{R} $$
   
-  $$ \bold{K_k} = \bold{\hat{P}\_{k+1}}\bold{\dot{H}^T_k}\bold{S_k}^{-1} $$
+  $$ \bold{K_k} = \bold{\hat{P}_{k+1}}\bold{\dot{H}^T_k}\bold{S_k}^{-1} $$
 
   $$ \bold{x_{k+1}} = \bold{\hat{x}\_{k+1}} + \bold{K_k}( \bold{z_{k+1}} - \bold{\hat{z}_{k+1}} )  $$
 
-  $$ \bold{P_{k+1}} = (\bold{I_{n_x}} - \bold{K_k}\bold{\dot{H}\_k})\bold{\hat{P}\_{k+1}} $$
+  $$ \bold{P_{k+1}} = (\bold{I_{n_x}} - \bold{K_k}\bold{\dot{H}_k})\bold{\hat{P}\_{k+1}} $$
   
 Where:
 
@@ -166,24 +169,114 @@ An important note is that using the Jacobian, the EKF is aproximating the non-li
 
 #### UKF
 
-The UKF tackles nonlinearity in a totally different way. Instead of trying to approximate the non-linear system, it uses a method called the Unscented Transform (UT). This involves picking a set of special points, called sigma points, to represent the spread of possible states. These points are propagated through the non-linear equations, and from the results, the UKF estimates the new mean and covariance based on those transformed points.
+The UKF tackles nonlinearity in a totally different way. Instead of trying to approximate the non-linear system, it uses a method called the Unscented Transform (UT). This involves picking a set of special points, called sigma points, to represent the spread of possible states. These points are propagated through the non-linear function, and from the results, the UKF estimates the new mean and covariance based on those transformed points.
 
-Instead of jumping directly into the UKF equations, it is convenient to first state the steps involve in the UT:
+Instead of jumping directly into the UKF equations, it is convenient to first go through the Unscented Transform. In this context, the UT can be defined as an operation that takes as input the state mean \\( \bold{x_k} \\), covariance \\( \bold{P_k} \\) and the non-linear function \\( f \\). Then, the UT estimates the mean \\( \bold{y_m} \\) and covariance \\( \bold{P_y} \\) of the resulting distribution after passing the state through the non-linear function. In addition, the propagated sigma points \\( \mathcal{Y} \\) are also of interest for UKF.
 
-1. Generating sigma points:
+$$ (\bold{y_m},\bold{P_y}, \mathcal{Y}) = UT(f, \bold{x_k}, \bold{P_k}) $$
 
-$$ \mathcal{X_i} $$
+Step by step, the UT is doing the following:
 
+1 Selecting parameters:
+
+  $$\alpha = 1, \hspace{0.2cm} \beta = 2, \hspace{0.2cm} \kappa = 0$$
+
+  $$\lambda = \alpha^2(n_x+\kappa)-n_x$$
+
+2 Computing weights
+
+$$ w^m_0 = \frac{\lambda}{\lambda+n_x}, \hspace{0.5cm} w^c_0 = \frac{\lambda}{\lambda+n_x} + 1 - \alpha^2 + \beta $$
+
+$$ w^m_i = w^c_i = \frac{1}{2(n_x+\lambda)} $$
+
+3 Generating sigma points set \\( \mathcal{X} \\):
+
+$$ \mathcal{X_0} = \bold{x_k} $$
+
+$$ \mathcal{X_i} = \bold{x_k} + \left(\sqrt{(\lambda+n_x)P_k}\right)_i, \hspace{0.5cm} i=1,..,n_x $$
+
+$$ \mathcal{X_i} = \bold{x_k} - \left(\sqrt{\lambda+n_x}\right)_{i-n_x}, \hspace{0.5cm} i=n_x + 1,..,2n_x $$
+
+4 Propagating sigma points through non-linear function (either  \\( f(.) \\) or \\( h(.) \\))
+
+$$ \mathcal{Y_i} = f(\mathcal{X_i}), \hspace{0.5cm} i=0,...,2n_x$$
+
+5 Estimating mean and covariance of the propagated distribution
+
+$$ \bold{y_m} = \sum_{i=0}^{2n_x}w^m_i\mathcal{Y_i} $$
+
+$$ \bold{P_y} = \sum_{i=0}^{2n_x}w^c_i(\mathcal{Y_i} - \bold{x}_m)(\mathcal{Y_i} - \bold{x}_m)^T $$
+
+Where \\( n_x \\) is the dimension of  the state and \\( \bold{L_k} = \sqrt{(\lambda+n_x)\bold{P_k}} \\) is the scaled square root of the state covariance matrix. The square root of a matrix is not defined, conventionally people use Cholesky factorization as an equivalent to matrix square root and that is what we used in the UKF implementation by leveraging `scipy.linalg.cholesky` function.
+
+Finally, the UKF cyclic operation can be defined as:
+
+- Prediction
+
+$$ \left(\bold{\hat{x}_{k+1}},\bold{P_y},\mathcal{Y}\right) = UT(f, \bold{x_k}, \bold{P_k}) $$
+
+$$ \bold{\hat{P}_{k+1}} = \bold{P_y} + \bold{Q_k}$$
+
+- Update
+
+$$ (\bold{\hat{z}\_{k+1}},\bold{P_{zz}},\mathcal{Z}) = UT(h, \bold{\hat{x}\_{k+1}}, \bold{\hat{P}\_{k+1}}) $$
+
+$$ \bold{P_{xz}} = \sum_{i=0}^{2n_x}w^c_i(\mathcal{Y_i} - \bold{\hat{x}\_{k+1}})(\mathcal{Z_i} - \bold{\hat{z}_{k+1}})^T $$
+
+$$ \bold{K_k} = \bold{P_{xz}}\bold{P^{-1}_{zz}} $$
+
+$$ \bold{x\_{k+1}} = \bold{\hat{x}\_{k+1}} + \bold{K_k}( \bold{z_{k+1}} - \bold{\hat{z}_{k+1}} )  $$
+
+$$ \bold{P_{k+1}} = \bold{P_{k+1}} -  \bold{K_k}\bold{P_{zz}}\bold{K_k^T}$$
+
+It is important to remark that the UKF does not require the computation of Jacobians as opposed to EKF. Despite this, it has been proven that UKF is able to achieve approximations of 3rd order for gaussian cases [REFERENCE].
 
 ![KF example GIF](/posts/images/KF_example.gif)
 
-{{< rawhtml >}}
+# Implementation
 
-<iframe src="/posts/images/rmse_comparison.html" width=800 height=800 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
-{{< /rawhtml >}}
+The implementation of both filters can be found in `filters.py` module. The EKF under `EKF_CTRV` class and the UKF under `UKF_CTRV`. Notice that the motion models and measurement function are injected as dependencies of each filter. This enable more flexibility in the future in case we want to try different motion models and measurement functions.
 
-$$\lim_{x \to 0^+} \dfrac{1}{x} = \infty$$
+A note on the CTRV implementation. From the transition function, it is visible that the model becomes undefined when target is not turning \\( \omega=0 \\). For those cases, both the transition function and its Jacobian are simplified to Constant Velocity (CV) in the code.
+
+#### Note on angle arithmetics
+
+Angles are modular quantities and as such, additional checks needs to be in-place when dealing with them. For instance, we cannot compute directly the average of a set of angles: the mean angle between 359\\( \degree \\) and 1\\( \degree \\) is 0\\( \degree \\), not 180\\( \degree \\). Instead, we need to use the [circular mean](https://en.wikipedia.org/wiki/Circular_mean).
+
+$$ \bar{\theta} = \tan^{-1}\left( \frac{\sum_{i=0}^{N-1} \sin(\theta_i)}{\sum_{i=0}^{N-1} \cos(\theta_i)} \right) $$
+
+In our case, we have the bearing angle in the measurement \\( \theta \\) and heading angle in the state \\( \phi \\). We need to ensure that (i) angles are always in the range between \\( (-\pi, \pi) \\) and (ii) use the *weighted* circular mean when estimating state mean in UKF. In the same `filters.py` module you will find the corresponding implementation.
+
+# Simulation and validation metrics
+
+A simulated target is generated moving in a straight line at constant velocity, then making a sharp turn and finally moving straight again. A sensor provides noisy measurement of range and bearing of the target at each frame. The following table summarizes the parameters used for the simulation, including the sensor errors:
+
+| Parameter        | Symbol | Value     |
+| ---------------- | ------ | --------  |
+| Time between frames | \\( T \\) | 50 ms     |
+| Iterations | \\( N \\) | 10     |
+| Sensor range standard deviation | \\( \sigma_r \\) | 0.5 m     |
+| Sensor azimuth standard deviation | \\( \sigma_\theta \\) | 2\\( \degree \\)     |
+| Process noise velocity | \\( q_v \\) | 5 m/s     |
+| Process noise turn rate | \\( q_\omega \\) | 10\\( \degree \\)     |
+
+All the logic for the simulation is in `simulation.py` module. The following figure shows an example of one iteration. It is important to notice how the position errors in X and Y increase as the target moves further from the sensor. This is expected due to the nonlinear nature of coordinate conversion from polar to cartesian.
+
+[INCLUDE FIGURE]
+
+The metric selected to evaluate the performance of the filters is the classical Root Mean Squared Error (RMSE) defined as:
+
+$$ RMSE(\bold{x}) = \epsilon_x = \sqrt{\frac{1}{N}\sum_{i=0}^{N-1}(\hat{x}_i-x_t)^2} $$
+
+Where \\( N \\) is the number of iterations, \\( \hat{x}_i \\) is the filter estimation at the i-th iteration and \\( x_t \\) is the true value.
+
+# Results
 
 # Conclusions
 
 # Future steps and remaining questions
+
+{{< rawhtml >}}
+<iframe src="/posts/images/rmse_comparison.html" width=800 height=800 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+{{< /rawhtml >}}
+
