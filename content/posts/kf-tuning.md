@@ -231,8 +231,6 @@ $$ \bold{P_{k+1}} = \bold{P_{k+1}} -  \bold{K_k}\bold{P_{zz}}\bold{K_k^T}$$
 
 It is important to remark that the UKF does not require the computation of Jacobians as opposed to EKF. Despite this, it has been proven that UKF is able to achieve approximations of 3rd order for gaussian cases [REFERENCE].
 
-![KF example GIF](/posts/images/KF_example.gif)
-
 # Implementation
 
 The implementation of both filters can be found in `filters.py` module. The EKF under `EKF_CTRV` class and the UKF under `UKF_CTRV`. Notice that the motion models and measurement function are injected as dependencies of each filter. This enable more flexibility in the future in case we want to try different motion models and measurement functions.
@@ -253,12 +251,12 @@ A simulated target is generated moving in a straight line at constant velocity, 
 
 | Parameter        | Symbol | Value     |
 | ---------------- | ------ | --------  |
-| Time between frames | \\( T \\) | 50 ms     |
+| Time between frames | \\( T \\) | 200 ms     |
 | Iterations | \\( N \\) | 10     |
 | Sensor range standard deviation | \\( \sigma_r \\) | 0.5 m     |
 | Sensor azimuth standard deviation | \\( \sigma_\theta \\) | 2\\( \degree \\)     |
-| Process noise velocity | \\( q_v \\) | 5 m/s     |
-| Process noise turn rate | \\( q_\omega \\) | 10\\( \degree \\)     |
+| Process noise velocity | \\( q_v \\) | 1 m/s     |
+| Process noise turn rate | \\( q_\omega \\) | 3\\( \degree \\)     |
 
 All the logic for the simulation is in `simulation.py` module. The following figure shows an example of one iteration. It is important to notice how the position errors in X and Y increase as the target moves further from the sensor. This is expected due to the nonlinear nature of coordinate conversion from polar to cartesian.
 
@@ -272,11 +270,52 @@ Where \\( N \\) is the number of iterations, \\( \hat{x}_i \\) is the filter est
 
 # Results
 
-# Conclusions
+The entire code for the validation, including figures, can be found in the notebook `ekf_vs_ukf.ipynb`. The following figure shows the estimated state at each frame averaged by the number of iterations.
 
-# Future steps and remaining questions
+{{< rawhtml >}}
+<iframe src="/posts/images/mean_state.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+{{< /rawhtml >}}
+
+As visible, at the initial stages, the EKF shows to provide faster convergence, specially to velocity. When the turning maneuver starts, both filters lag the true position and turn rate estimation. This is expected, since the motion model CTRV does not contemplates changes in turn rate. Nevertheless, the UKF seen to have better behaviour than EKF during this turn, since the turn rate estimation is laggy but does not overshoot as the EKF, which lead to better RMSE for posision as we will see in the next figure.
+
+As designers, we can improve this response for both filters by increasing the process noise \\( q_w \\), however this comes at the cost of less accurate state estimation for periods where the target move straight. Selecting appropiate values for the process noise deserves a whole post, maybe in the future 😉.
+
+To complement the results, the following figure shows the RMSE error as a function of time for position (combining X and Y), heading, velocity and turn rate.
 
 {{< rawhtml >}}
 <iframe src="/posts/images/rmse_comparison.html" width=800 height=800 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
 {{< /rawhtml >}}
+
+First, let's focus on the position RMSE. In practice, this is the most important metric, since a big error in position could lead to misassociation and track lost which is critical for many applications. Overall, both filters offer better position estimation that what the raw measurements provide. Obviously, this is expected and one of the advantages of using a KF for state estimation. However, at the begining of the target turn, for a small time window, both of them show higher position RMSE than the measurement, this is the effect filter lagging due to target maneuvers not contemplated in the motion model. However, among the two filters, the EKF shows the worst performance as the RMSE peak is higher which could lead to target lost for some iterations in practical systems.
+
+In addition, target heading estimation is also better for UKF during turning than for EKF, which is not able to provide a RMSE below \\( 10 \degree \\) for the duration of the maneuver. The same conclusion can be drawn for turn rate estimation. On the other hand, EKF provides better estimation of target velocity furing maneuver than UKF.
+
+Just for the purpose of illustration, this GIF provides a zoomed view of the behaviours of both filters during target turning. The effect of lagging and later overshoot is visible for the EKF.
+
+![KF example GIF](/posts/images/KF_example.gif)
+
+#### Robustnes to process noise mismatch
+
+For real applications, selecting the proper process noise is a challenging task. The filter designer should take into account all the possible maneuvers and ways in which the target could move. As an example, consider an automotive applications, a vehicle can brake, turn, cut-in, ecc... Also a motorcycle will likely do more manevuer than a car. The selection involves careful validation with tons of real, labeled data in many open road scenarios as well as simulated and controlled environments. In most cases this is not available and it is likely that the process noise selection is not optimal. Therefore, it is key the test the robustnes of the filters to process noise mismatch.
+
+To perform this task, in the notebook `ekf_vs_ukf_robust_test.ipynb`, we have measured the RMSE of the filter estimations in `10` iterations with 4 different values for \\( q_v\\) and 5 for \\( q_\omega\\) for a total of 20 process noise combinations.
+
+The following heatmaps show the averaged RMSE over iterations and time obtained for each filter using a given process noise combination. First, thing to notice, is that \\( q_\omega\\) has a greater impact in the performance than \\( q_v\\). In particular, both filter show the worst performance for \\( q_\omega=1\degree\\). This is expected since this value is not able to capture maneuver performed by the target. However, the UKF shows considerable better position estimation than EKF in this extreme condition.
+
+In general, the UKF seens to be more robust to mismatches in process noise, starting from \\( q_\omega= 5\degree\\) the position RMSE is reasonable and much lower than EKF for the same value of process noise. The same is translated to heading estimation. Nevertheless, the EKF is able to achieve similar performance than UKF but given that process noise values are appropiate and it is much more sensible to mismatches.
+
+{{< rawhtml >}}
+<image src="/posts/images/rmse_pos.png" alt="state and measurement model" position="center" style="border-radius: 8px; width: 800px; height: 320px; object-fit: cover; object-position: top;">
+{{< /rawhtml >}}
+
+{{< rawhtml >}}
+<image src="/posts/images/rmse_phi.png" alt="state and measurement model" position="center" style="border-radius: 8px; width: 800px; height: 320px; object-fit: cover; object-position: top;">
+{{< /rawhtml >}}
+
+#### Computational cost
+
+# Conclusions
+
+# Future steps and remaining questions
+
 
