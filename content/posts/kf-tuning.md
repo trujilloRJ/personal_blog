@@ -1,5 +1,5 @@
 +++
-title = "EKF vs. UKF performance and robustness comparison for non-linear state estimation"
+title = "EKF vs. UKF performance and robustness comparison for nonlinear state estimation"
 date = "2024-06-25T15:06:40+02:00"
 author = "Javier Trujillo Rodriguez"
 authorTwitter = "" #do not include @
@@ -21,9 +21,9 @@ The Kalman Filter (KF) is used for estimating the state of a dynamic system from
 
 - **Gaussian errors**: The process and measurement noise (\\(Q\\) and \\(R\\) matrices) can be modelled as Gaussian distributions.
 
-In real systems, these conditions are rarely met. In particular, for non-linear systems, the community had proposed variations of the original KF that are **sub-optimal** but still provide good performance. Among the proposed solutions, two approaches have been widely adopted, the Extended-KF (EKF) and the Unscented-KF (UKF).
+In real systems, these conditions are rarely met. In particular, for nonlinear systems, the community had proposed variations of the original KF that are **sub-optimal** but still provide good performance. Among the proposed solutions, two approaches have been widely adopted, the Extended-KF (EKF) and the Unscented-KF (UKF).
 
-The EKF approximates non-linear functions by linearizing them around the current estimate. In practice, due to complexity and computational cost, only the first-order Taylor series expansion term is used for the linearization. In contrast, the UKF uses estimates the mean and covariance of the state distribution by selecting a minimal set of points (sigma points) from the current state, propagating these points through the non-linear system, and using the resulting transformed points to calculate the posterior mean and covariance.
+The EKF approximates nonlinear functions by linearizing them around the current estimate. In practice, due to complexity and computational cost, only the first-order Taylor series expansion term is used for the linearization. In contrast, the UKF uses estimates the mean and covariance of the state distribution by selecting a minimal set of points (sigma points) from the current state, propagating these points through the nonlinear system, and using the resulting transformed points to calculate the posterior mean and covariance.
 
 As engineers facing a decision between these two, we would like to have insight into the following questions:
 
@@ -33,18 +33,17 @@ As engineers facing a decision between these two, we would like to have insight 
 
 - Which filter is more robust to model mismatches?
 
-- Are the filters numerically stable?
-
-This post explore each one of these points by comparing the EKF vs. UKF in a simulated environment assuming a target moving with Constant Turn Rate and Velocity (CTRV) and a sensor that measures range and bearing. Both the motion model and the measurement function are non-linear.
+This post explore each one of these points by comparing the EKF vs. UKF in a simulated environment assuming a target moving with Constant Turn Rate and Velocity (CTRV) and a sensor that measures range and bearing. Both the motion model and the measurement function are nonlinear.
 
 ## Table of Contents
 
 1. [Motion model and measurement function](#motion-model-and-measurement-function)
 2. [EKF and UKF algorithm](#ekf-and-ukf-algorithm)
-3. [Implementation](#example2)
-4. [Simulation and validation metrics](#validation)
-5. [Results](#Results)
-6. [Conclusions](#Conclusions)
+3. [Implementation](#implementation)
+4. [Simulation and validation metrics](#simulation-and-validation-metrics)
+5. [Results](#results)
+6. [Conclusions](#conclusions)
+7. [Appendix](#appendix)
 
 # Motion model and measurement function
 
@@ -79,7 +78,7 @@ v_k \\\
 \end{bmatrix}
 $$
 
-As can be seen this function is non-linear. This means that if we consider that the state distribution is gaussian at time \\(k\\) after passing it through the function the resulting distribution is no longer gaussian. This violates the assumptions made by the standard KF and if applied it will result in filter divergence. To deal with this, the research community had proposed several solutions, by far the most widely adopted in the industry is the EKF. As mentioned before the implementation of the EKF require the computation of Jacobians for the state transition function, to avoid cluttered the content, it has been defined in the Appendix section.
+As can be seen this function is nonlinear. This means that if we consider that the state distribution is gaussian at time \\(k\\) after passing it through the function the resulting distribution is no longer gaussian. This violates the assumptions made by the standard KF and if applied it will result in filter divergence. To deal with this, the research community had proposed several solutions, by far the most widely adopted in the industry is the EKF. As mentioned before the implementation of the EKF require the computation of Jacobians for the state transition function, to avoid cluttered the content, it has been defined in the Appendix section.
 
 #### Range and bearing measurement function
 
@@ -97,7 +96,7 @@ $$
 \end{bmatrix}
 $$
 
-It is clear that the measurement function is also non-linear. The Jacobian of this function, required for the EKF, can also be found in the Appendix section.
+It is clear that the measurement function is also nonlinear. The Jacobian of this function, required for the EKF, can also be found in the Appendix section.
 
 #### Modelling measurement and process noise
 
@@ -136,7 +135,7 @@ $$
 
 #### EKF
 
-As mentioned before, the EKF deal with system non-linearities by linerizing them around the current estimate. In practice, the difference with respect to the standard KF is that the matrices used for covariance propagation are the Jacobian of the state transition and measurement function. The EKF cycle can be described by the following equations:
+As mentioned before, the EKF deal with system nonlinearities by linerizing them around the current estimate. In practice, the difference with respect to the standard KF is that the matrices used for covariance propagation are the Jacobian of the state transition and measurement function. The EKF cycle can be described by the following equations:
 
 - Prediction:
   $$ \bold{\hat{x}_{k+1}}=f(\bold{x_k}) $$
@@ -165,13 +164,13 @@ Where:
 
 - and \\( \bold{I_{n_x}} \\) is the identity matrix for the dimension of the state, \\( n_x = 5 \\), in the specific case of CTRV.
 
-An important note is that using the Jacobian, the EKF is aproximating the non-linear function using only the first order term of the Taylor series expansion. Other, more accurate, implementations of the EKF, incorporates higher order terms (REFERENCE) but its implementation is unfeasible for most practical systems.
+An important note is that using the Jacobian, the EKF is aproximating the nonlinear function using only the first order term of the Taylor series expansion. Other, more accurate, implementations of the EKF, incorporates higher order terms (REFERENCE) but its implementation is unfeasible for most practical systems.
 
 #### UKF
 
-The UKF tackles nonlinearity in a totally different way. Instead of trying to approximate the non-linear system, it uses a method called the Unscented Transform (UT). This involves picking a set of special points, called sigma points, to represent the spread of possible states. These points are propagated through the non-linear function, and from the results, the UKF estimates the new mean and covariance based on those transformed points.
+The UKF tackles nonlinearity in a totally different way. Instead of trying to approximate the nonlinear system, it uses a method called the Unscented Transform (UT). This involves picking a set of special points, called sigma points, to represent the spread of possible states. These points are propagated through the nonlinear function, and from the results, the UKF estimates the new mean and covariance based on those transformed points.
 
-Instead of jumping directly into the UKF equations, it is convenient to first go through the Unscented Transform. In this context, the UT can be defined as an operation that takes as input the state mean \\( \bold{x_k} \\), covariance \\( \bold{P_k} \\) and the non-linear function \\( f \\). Then, the UT estimates the mean \\( \bold{y_m} \\) and covariance \\( \bold{P_y} \\) of the resulting distribution after passing the state through the non-linear function. In addition, the propagated sigma points \\( \mathcal{Y} \\) are also of interest for UKF.
+Instead of jumping directly into the UKF equations, it is convenient to first go through the Unscented Transform. In this context, the UT can be defined as an operation that takes as input the state mean \\( \bold{x_k} \\), covariance \\( \bold{P_k} \\) and the nonlinear function \\( f \\). Then, the UT estimates the mean \\( \bold{y_m} \\) and covariance \\( \bold{P_y} \\) of the resulting distribution after passing the state through the nonlinear function. In addition, the propagated sigma points \\( \mathcal{Y} \\) are also of interest for UKF.
 
 $$ (\bold{y_m},\bold{P_y}, \mathcal{Y}) = UT(f, \bold{x_k}, \bold{P_k}) $$
 
@@ -197,7 +196,7 @@ $$ \mathcal{X_i} = \bold{x_k} + \left(\sqrt{(\lambda+n_x)P_k}\right)_i, \hspace{
 
 $$ \mathcal{X_i} = \bold{x_k} - \left(\sqrt{\lambda+n_x}\right)_{i-n_x}, \hspace{0.5cm} i=n_x + 1,..,2n_x $$
 
-4 Propagating sigma points through non-linear function (either  \\( f(.) \\) or \\( h(.) \\))
+4 Propagating sigma points through nonlinear function (either  \\( f(.) \\) or \\( h(.) \\))
 
 $$ \mathcal{Y_i} = f(\mathcal{X_i}), \hspace{0.5cm} i=0,...,2n_x$$
 
@@ -260,7 +259,9 @@ A simulated target is generated moving in a straight line at constant velocity, 
 
 All the logic for the simulation is in `simulation.py` module. The following figure shows an example of one iteration. It is important to notice how the position errors in X and Y increase as the target moves further from the sensor. This is expected due to the nonlinear nature of coordinate conversion from polar to cartesian.
 
-[INCLUDE FIGURE]
+{{< rawhtml >}}
+<iframe src="/posts/images/example_simulation.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+{{< /rawhtml >}}
 
 The metric selected to evaluate the performance of the filters is the classical Root Mean Squared Error (RMSE) defined as:
 
@@ -300,12 +301,12 @@ For real applications, selecting the proper process noise is a challenging task.
 
 To perform this task, in the notebook `ekf_vs_ukf_robust_test.ipynb`, we have measured the RMSE of the filter estimations in `10` iterations with 4 different values for \\( q_v\\) and 5 for \\( q_\omega\\) for a total of 20 process noise combinations.
 
-The following heatmaps show the averaged RMSE over iterations and time obtained for each filter using a given process noise combination. First, thing to notice, is that \\( q_\omega\\) has a greater impact in the performance than \\( q_v\\). In particular, both filter show the worst performance for \\( q_\omega=1\degree\\). This is expected since this value is not able to capture maneuver performed by the target. However, the UKF shows considerable better position estimation than EKF in this extreme condition.
+The following heatmaps show the averaged RMSE over iterations and time obtained for each filter using a given process noise combination. First thing to notice, is that \\( q_\omega\\) has a greater impact in the performance than \\( q_v\\). In particular, both filter show the worst performance for \\( q_\omega=0.5\degree\\). This is expected since this value is not able to capture the maneuver performed by the target. However, the UKF shows significantly better position estimation than EKF in this extreme condition.
 
-In general, the UKF seens to be more robust to mismatches in process noise, starting from \\( q_\omega= 5\degree\\) the position RMSE is reasonable and much lower than EKF for the same value of process noise. The same is translated to heading estimation. Nevertheless, the EKF is able to achieve similar performance than UKF but given that process noise values are appropiate and it is much more sensible to mismatches.
+In general, the UKF seems to be more robust to mismatches in process noise, starting from \\( q_\omega= 0.8\degree\\) the position RMSE is reasonable and much lower than EKF for the same value of process noise. This conclusion is also valid for the heading estimation. Nevertheless, the EKF is able to achieve similar, even slightly better, performance than UKF but given that process noise values are appropiate but at the cost of a greater snesitivity to mismatches. Therefore, the filter designer needs to dedicate lots of attention a resources in the selection of the process noise if the EKF is the choice. 
 
 {{< rawhtml >}}
-<image src="/posts/images/rmse_pos.png" alt="state and measurement model" position="center" style="border-radius: 8px; width: 800px; height: 320px; object-fit: cover; object-position: top;">
+<image src="/posts/images/rmse_pos.png" alt="state and measurement model" position="center" style="border-radius: 8px; width: 800px;">
 {{< /rawhtml >}}
 
 {{< rawhtml >}}
@@ -314,8 +315,39 @@ In general, the UKF seens to be more robust to mismatches in process noise, star
 
 #### Computational cost
 
+The computationale cost was measured in terms of time of execution per frame for each filter. A simple validation was conducted using `time.perf_counter_ns` from Python `time` module on each iteration and frame and later on reporting the average time per execution for each filter.
+
+| Filter        | Average time per frame (ms)
+| ---------------- | ------
+| EKF | 100 us
+| UKF | 620 us 
+
+The values reported are not much relevant in absolute terms, as it depends on the hardware platform and the programming language use for the implementation. However, in relative terms they are significant, basically the EKF is around `6x` faster tahn the UKF with the CTRV model and range. bearing measurement function. This difference is relevant if the implementation targets an embedded environment with limited computational resources.
+
+As a word of caution, I cannot guarantee that my implementation is the fastest for UKF and EKF, it was not the focus of the experiment, yet I tried to vectorized as much as possible all the operation by leveraging `numpy` library functionality
+
 # Conclusions
+
+The UKF and EKF were implemented using CTRV motion model and tested in a simulated environment with a sensor providing range and bearing. The results lead to the follwing conclusions:
+
+- When desing properly, **both EKF and UKF are good solutions for nonlinear filtering offering showing similar performance**.
+
+- **The UKF is more robust to process noise mismatch than the EKF** which can be desirable for applications with a high degree of uncertainty and were robustness is critical.
+
+- **The EKF is computationally cheaper than UKF** which can be a major feature if the application require implementation in a limited environment.
+
+- **A hidden advantage of the UKF over the EKF is that it does not require to compute Jacobians**. This is not relevant fro this experiment, as both the measurement and transition function are analytically derivable. However, for other more complex scenarios this can be a major advantage. 
 
 # Future steps and remaining questions
 
+It is important to remark that this evaluation and comparison is by no means exhaustive. A direct next step will be to test with more scenarios, for example what happens if the velocity change? In other words, if we add tangential acceleartion to the target.
 
+Also, these conclusions cannot extrapolated completely to other applications. This is because of the nature of the specific nonlinear functions determines which filter performs the best. Other elements such as time between frames and measurement noise also contributes to obtain different filter performance and therefore, different conclusions. 
+
+A natural next step will be to add Doppler velocity in the measurement function since radar sensor are able to measure this value. The measurement function becomes even "more nonlinear" and the filter performances might change.
+
+On the same idea, it could be interesting to extend the motion model to Constant Turn Rate and Acceleration (CTRA) which is a more complex motion model able to capture simultaneouly acceleration and turning maneuvers.
+
+Please contact me via Github if you have any suggestions or want to see any of these steps developed 😊
+
+# Appendix
