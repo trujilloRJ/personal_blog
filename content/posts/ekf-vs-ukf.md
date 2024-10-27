@@ -1,11 +1,11 @@
 +++
 title = "EKF vs. UKF performance and robustness comparison for nonlinear state estimation"
-date = "2024-06-25T15:06:40+02:00"
+date = "2024-10-26T15:06:40+02:00"
 author = "Javier Trujillo Rodriguez"
 authorTwitter = "" #do not include @
 cover = ""
 tags = ["kalman-filters", "tracking", "numpy"]
-keywords = ["cnn", "convolutional neural network", "fmcw radar", "range-Doppler map", "PyTorch"]
+keywords = ["kalman filters", "object tracking", "EKF", "UKF", "numpy"]
 description = "A performance comparison between the Extended Kalman Filter (EKF) and the Unscented Kalman Filter (UKF) in a simulated environment"
 showFullContent = false
 readingTime = false
@@ -367,14 +367,6 @@ Please contact me via Github if you have any suggestions or want to see any of t
 
 1- Jacobian of the transition function:
 
-$$r_c = v_k/\omega_k$$
-
-$$\phi_{k+1|k} = \phi_k + \omega_kT$$
-
-$$ w_0 = r_cT\cos(\phi\_{k+1|k}) + r_c/\omega_k\left(\sin(\phi_k) - \sin(\phi\_{k+1|k})\right) $$
-
-$$ w_1 = r_cT\sin(\phi\_{k+1|k}) - r_c/\omega_k\left(\cos(\phi_k) - \cos(\phi\_{k+1|k})\right) $$
-
 $$
 \bold{\dot{F}_k}=
 \begin{bmatrix}
@@ -390,9 +382,15 @@ $$
 \end{bmatrix}
 $$
 
-2- Jacobian of the measurement function:
+$$r_c = v_k/\omega_k$$
 
-$$ r_k = \sqrt{x_k^2 + y_k^2} $$
+$$\phi_{k+1|k} = \phi_k + \omega_kT$$
+
+$$ w_0 = r_cT\cos(\phi\_{k+1|k}) + r_c/\omega_k\left(\sin(\phi_k) - \sin(\phi\_{k+1|k})\right) $$
+
+$$ w_1 = r_cT\sin(\phi\_{k+1|k}) - r_c/\omega_k\left(\cos(\phi_k) - \cos(\phi\_{k+1|k})\right) $$
+
+2- Jacobian of the measurement function:
 
 $$
 \bold{\dot{H}_k}=
@@ -403,3 +401,6 @@ x_k/r_k & y_k/r_k & 0 & 0 & 0
 \\\
 \end{bmatrix}
 $$
+
+$$ r_k = \sqrt{x_k^2 + y_k^2} $$
+
