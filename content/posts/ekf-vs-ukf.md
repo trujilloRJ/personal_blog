@@ -368,7 +368,7 @@ Please contact me via Github if you have any suggestions or want to see any of t
 1- Jacobian of the transition function:
 
 $$
-\bold{\dot{F}_k}=
+\bold{\dot{F}\_k}=
 \begin{bmatrix}
 1 & 0 & r_c\left(\cos(\phi\_{k+1|k}) - \cos(\phi_k)\right) & 1/\omega_k \left(\sin(\phi\_{k+1|k}) - \sin(\phi_k)\right) & w_0 
 \\\
@@ -393,7 +393,7 @@ $$ w_1 = r_cT\sin(\phi\_{k+1|k}) - r_c/\omega_k\left(\cos(\phi_k) - \cos(\phi\_{
 2- Jacobian of the measurement function:
 
 $$
-\bold{\dot{H}_k}=
+\bold{\dot{H}\_k}=
 \begin{bmatrix}
 x_k/r_k & y_k/r_k & 0 & 0 & 0 
 \\\
