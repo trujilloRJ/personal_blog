@@ -392,8 +392,9 @@ $$ w_1 = r_cT\sin(\phi\_{k+1|k}) - r_c/\omega_k\left(\cos(\phi_k) - \cos(\phi\_{
 
 2- Jacobian of the measurement function:
 
+{{< rawhtml >}}
 $$
-\bold{\dot{H}\_k}=
+\bold{\dot{H}_k}=
 \begin{bmatrix}
 x_k/r_k & y_k/r_k & 0 & 0 & 0 
 \\\
@@ -401,6 +402,7 @@ x_k/r_k & y_k/r_k & 0 & 0 & 0
 \\\
 \end{bmatrix}
 $$
+{{< \rawhtml >}}
 
 $$ r_k = \sqrt{x_k^2 + y_k^2} $$
 
