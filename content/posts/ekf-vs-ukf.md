@@ -61,6 +61,7 @@ Fig.1 Target state with CTRV and sensor measurement.
 
 This motion model assumes that both the target velocity and turn rate are constant, the state transition function can be obtained as:
 
+{{< rawhtml >}}
 $$
 \bold{\hat{x}_{k+1}}=f(\bold{x_k})=
 \begin{bmatrix}
@@ -71,6 +72,7 @@ v_k \\\
 \omega_k
 \end{bmatrix}
 $$
+{{< /rawhtml >}}
 
 This function is clearly nonlinear, which means that if we assume the state distribution is Gaussian at time \\(k\\), passing it through this function will yield a distribution that is no longer Gaussian. This violates the assumptions of the standard KF, and using it here would lead to filter divergence. To address this, researchers have proposed various solutions, with the EKF being the most widely adopted in the industry. As previously noted, implementing the EKF requires calculating Jacobians for the state transition function. For clarity and conciseness, these calculations are provided in the Appendix section.
 
@@ -82,6 +84,7 @@ $$\bold{z_k}=[r^m_k, \theta^m_k]^T$$
 
 However, the track states contain the target position in cartesian coordinates. Therefore, to update the filter state, we need a measurement function that maps between the state space and measurement space:
 
+{{< rawhtml >}}
 $$
 \bold{\hat{z}_{k+1}}=h(\bold{\hat{x}})=
 \begin{bmatrix}
@@ -89,6 +92,7 @@ $$
 \tan^{-1}({y_k}/{x_k})
 \end{bmatrix}
 $$
+{{< /rawhtml >}}
 
 The measurement function is also nonlinear. The Jacobian of this function, required for the EKF, can also be found in the Appendix .
 
@@ -96,6 +100,7 @@ The measurement function is also nonlinear. The Jacobian of this function, requi
 
 Due to noise, the sensor never provides an exact measurement. The noise is usually modeled as independent random Gaussian distributions with zero mean and covariance defined as:
 
+{{< rawhtml >}}
 $$
 \bold{R}=
 \begin{bmatrix}
@@ -103,6 +108,7 @@ $$
 0 & \sigma^2_{\theta}
 \end{bmatrix}
 $$
+{{< /rawhtml >}}
 
 Where \\(\sigma_r\\) and \\(\sigma\_{\theta}\\) represent the standard deviations of noise in range and bearing, respectively. These values are usually inherent to the sensor's characteristics. For instance, in FMCW radars, range error relates to range resolution, which in turn depends on the waveform bandwidth.
 
@@ -114,6 +120,7 @@ $$
 
 where \\( \bold{q} = diag([q_v^2, q_\omega^2]) \\) and
 
+{{< rawhtml >}}
 $$
 \bold{\Gamma_k}=
 \begin{bmatrix}
@@ -124,6 +131,7 @@ T & 0 \\\
 0 & T
 \end{bmatrix}
 $$
+{{< /rawhtml >}}
 
 # EKF and UKF algorithm
 
@@ -367,8 +375,9 @@ Please contact me via Github if you have any suggestions or want to see any of t
 
 1- Jacobian of the transition function:
 
+{{< rawhtml >}}
 $$
-\bold{\dot{F}\_k}=
+\bold{\dot{F}_k}=
 \begin{bmatrix}
 1 & 0 & r_c\left(\cos(\phi\_{k+1|k}) - \cos(\phi_k)\right) & 1/\omega_k \left(\sin(\phi\_{k+1|k}) - \sin(\phi_k)\right) & w_0 
 \\\
@@ -381,6 +390,7 @@ $$
 0 & 0 & 0 & 0 & 1
 \end{bmatrix}
 $$
+{{< /rawhtml >}}
 
 $$r_c = v_k/\omega_k$$
 
@@ -402,7 +412,7 @@ x_k/r_k & y_k/r_k & 0 & 0 & 0
 \\\
 \end{bmatrix}
 $$
-{{< \rawhtml >}}
+{{< /rawhtml >}}
 
 $$ r_k = \sqrt{x_k^2 + y_k^2} $$
 
