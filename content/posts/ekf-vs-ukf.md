@@ -17,7 +17,7 @@ math = true
 
 The Kalman Filter (KF) estimates the state of a dynamic system based on noisy measurements, delivering optimal performance if the **system is linear and noise is Gaussian**. However, in real-world nonlinear systems, these conditions are rarely met. To address this, the community had proposed variations of the original KF that are **sub-optimal** but still provide good performance. Among the proposed solutions, two approaches have been widely adopted, the Extended-KF (EKF) and the Unscented-KF (UKF).
 
-The EKF approximates nonlinear functions by linearizing them around the current estimate. In practice, due to complexity and computational cost, only the first-order Taylor series expansion term is used for the linearization. In contrast, the UKF uses estimates the mean and covariance of the state distribution by selecting a minimal set of points (sigma points) from the current state, propagating these points through the nonlinear system, and using the resulting transformed points to calculate the posterior mean and covariance.
+The EKF approximates nonlinear functions by linearizing them around the current estimate. In practice, due to complexity and computational cost, only the first-order Taylor series expansion term is used for the linearization. In contrast, the UKF estimates the mean and covariance of the state distribution by selecting a minimal set of points (sigma points) from the current state, propagating these points through the nonlinear system, and using the resulting transformed points to calculate the posterior mean and covariance.
 
 As engineers facing a decision between these two, we seek insight into the following questions:
 
@@ -28,6 +28,11 @@ As engineers facing a decision between these two, we seek insight into the follo
 - Which filter is more robust to model mismatches?
 
 This post explores each of these points by comparing the EKF and UKF in a simulated environment, assuming a target moving with Constant Turn Rate and Velocity (CTRV) and a sensor that measures range and bearing. Both the motion model and the measurement function are nonlinear, making this a perfect use case for comparing EKF and UKF.
+
+## Source code
+
+The source code for this post is avialable in the following Github repo:
+https://github.com/trujilloRJ/kf_sandbox
 
 ## Table of Contents
 
@@ -45,7 +50,7 @@ This post explores each of these points by comparing the EKF and UKF in a simula
 
 We will consider a target moving on a 2D plane whose motion can be modeled with the CTRV. The filter state is represented in Fig. 1 and defined in polar coordinates as:
 
-$$\bold{x_k}=[x_k, y_k, v_k, \phi_k, \omega_k]^T$$
+$$\bold{x_k}=[x_k, y_k, \phi_k, v_k, \omega_k]^T$$
 
 Where the subscript \\(k\\) represents the time index and:
 
@@ -74,15 +79,15 @@ v_k \\\
 $$
 {{< /rawhtml >}}
 
-This function is clearly nonlinear, which means that if we assume the state distribution is Gaussian at time \\(k\\), passing it through this function will yield a distribution that is no longer Gaussian. This violates the assumptions of the standard KF, and using it here would lead to filter divergence. To address this, researchers have proposed various solutions, with the EKF being the most widely adopted in the industry. As previously noted, implementing the EKF requires calculating Jacobians for the state transition function. For clarity and conciseness, these calculations are provided in the Appendix section.
+This function is clearly nonlinear, which means that if we assume the state distribution is Gaussian at time \\(k\\), passing it through this function will yield a distribution that is no longer Gaussian. This violates the assumptions of the standard KF, and using it here would lead to filter divergence. To address this, researchers have proposed various solutions, with the EKF being the most widely adopted in the industry. Implementing the EKF requires calculating Jacobians for the state transition function. For clarity and conciseness, these calculations are provided in the [Appendix](#appendix) section.
 
 #### Range and bearing measurement function
 
-As visible in Fig. 1, the sensor provides at each time \\(k\\) the target position by measuring range \\(r^m_k\\) and bearing \\(\theta^m_k\\) defining the measurement:
+As visible in Fig. 1, the sensor provides at each time \\(k\\) the target position by measuring range \\(r^m_k\\) and bearing \\(\theta^m_k\\) defining the measurement vector:
 
 $$\bold{z_k}=[r^m_k, \theta^m_k]^T$$
 
-However, the track states contain the target position in cartesian coordinates. Therefore, to update the filter state, we need a measurement function that maps between the state space and measurement space:
+However, the filter state contain the target position in cartesian coordinates. Therefore, to update it, we need a measurement function that maps between the state space and measurement space:
 
 {{< rawhtml >}}
 $$
@@ -94,7 +99,7 @@ $$
 $$
 {{< /rawhtml >}}
 
-The measurement function is also nonlinear. The Jacobian of this function, required for the EKF, can also be found in the Appendix .
+The measurement function is also nonlinear. The Jacobian of this function, required for the EKF, can also be found in the [Appendix](#appendix).
 
 #### Modelling measurement and process noise
 
