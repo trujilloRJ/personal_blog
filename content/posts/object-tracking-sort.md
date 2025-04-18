@@ -25,6 +25,8 @@ In this post, we will explore key concepts of object tracking and present its fl
 
 ## Source code
 
+The source code for the object tracker is available at: https://github.com/trujilloRJ/sort_based_object_tracking
+
 ## Table of Contents
 
 1. [System overview](#system-overview)
