@@ -85,7 +85,7 @@ However, we could use a more informed approach: the learning rate range test. Pr
 <image src="/posts/images/lr_range_test.png" alt="Example lane" position="center" style="border-radius: 8px; width: 1200px" >
 {{< /rawhtml >}}
 
-The figure shows the result of the LR range test for our dataset. As observed, the training loss decreases steadily and then begins to rise sharply after a certain value around `0.1`. Based on this curve, we selected a starting learning rate of `1e-4` (very close to the empiric Karpathy's constant 😊), which lies just before the loss starts to diverge. This choice tries to maximize learning efficiency while maintaining training stability.
+The figure shows the result of the LR range test for our dataset. As observed, the training loss decreases steadily and then begins to rise sharply after a certain value around `0.1`. Based on this curve, we selected a starting learning rate of `1e-4` (very close to the empirical Karpathy's constant 😊), which lies just before the loss starts to diverge. This choice tries to maximize learning efficiency while maintaining training stability.
 
 #### Optimizer
 
@@ -161,7 +161,7 @@ These results are also valid to the whole validation dataset with a higher ROC A
 
 While reviewing some challenging cases, I noticed the model struggled with variable lighting conditions that altered the road’s color from the usual appearance. This suggests the model was relying too heavily on color cues to detect roads. A good way to address this is to expand the training data with varied lighting scenarios, encouraging the model to focus more on shape than color. We can simulate this by applying data augmentation techniques.
 
-For this, I used the library [**albumentions**](https://albumentations.ai/) as it offers a wide range of transformations like scaling, rotation, color shifting and many more that comes handy for computer visions tasks. In adittion, it integrates easily with Pytorch. Specifically, applying random color shifting transformations to our data can help the model become more robust to varying lighting conditions and improve its generalization.
+For this, I used the library [**albumentations**](https://albumentations.ai/) as it offers a wide range of transformations like scaling, rotation, color shifting and many more that comes handy for computer visions tasks. In adittion, it integrates easily with Pytorch. Specifically, applying random color shifting transformations to our data can help the model become more robust to varying lighting conditions and improve its generalization.
 
 {{< rawhtml >}}
 <image src="/posts/images/compare_loss_aug.png" alt="compare_aug" position="center" style="border-radius: 8px; width: 1200px" >
