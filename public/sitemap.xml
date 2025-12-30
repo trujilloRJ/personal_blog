@@ -50,12 +50,6 @@
     <loc>//localhost:1313/tags/radar/</loc>
     <lastmod>2022-09-10T15:06:40+02:00</lastmod>
   </url><url>
-    <loc>//localhost:1313/posts/images/example_simulation/</loc>
-  </url><url>
-    <loc>//localhost:1313/posts/images/mean_state/</loc>
-  </url><url>
-    <loc>//localhost:1313/posts/images/rmse_comparison/</loc>
-  </url><url>
     <loc>//localhost:1313/categories/</loc>
   </url>
 </urlset>

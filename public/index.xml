@@ -824,8 +824,8 @@ $$ r_k = \sqrt{x_k^2 + y_k^2} $$</content>
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;698217534&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;698217534&#34;&gt;
+    &lt;input id=&#34;263795841&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;263795841&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Loading data&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -870,8 +870,8 @@ X, y = np.array(X), np.array(y)
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;529367418&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;529367418&#34;&gt;
+    &lt;input id=&#34;945387126&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;945387126&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -900,8 +900,8 @@ ax.set_title(&amp;#39;Class distribution&amp;#39;)
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;624739185&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;624739185&#34;&gt;
+    &lt;input id=&#34;486912357&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;486912357&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Visualizing data examples&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -947,8 +947,8 @@ axs[i, j].axis(&amp;#39;tight&amp;#39;)
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;753962184&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;753962184&#34;&gt;
+    &lt;input id=&#34;382617459&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;382617459&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Custom dataset&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -980,8 +980,8 @@ self.labels = torch.from_numpy(labels)
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;839524716&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;839524716&#34;&gt;
+    &lt;input id=&#34;176345298&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;176345298&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Dataset splitting&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -1022,8 +1022,8 @@ val_dataset = MapsDataset(X_val, y_val)
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;935817642&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;935817642&#34;&gt;
+    &lt;input id=&#34;861935724&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;861935724&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Conv1Net&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
@@ -1123,8 +1123,8 @@ super(Conv1Net, self).**init**()
 
 
   &lt;div class=&#34;collapsable-code&#34;&gt;
-    &lt;input id=&#34;856413927&#34; type=&#34;checkbox&#34;  /&gt;
-    &lt;label for=&#34;856413927&#34;&gt;
+    &lt;input id=&#34;287359614&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;287359614&#34;&gt;
       &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__title&#34;&gt;Conv2Net&lt;/span&gt;
       &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
