@@ -278,7 +278,7 @@ A simulated target is generated to move in a straight line at a constant velocit
 All the simulation logic is contained in the `simulation.py` module. The figure below illustrates an example of one iteration. It’s important to note how the position errors in the X and Y coordinates increase as the target moves further away from the sensor. This behavior is expected, given the nonlinear nature of the conversion from polar to Cartesian coordinates.
 
 {{< rawhtml >}}
-<iframe src="/posts/images/example_simulation.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+<iframe src="/example_simulation.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
 {{< /rawhtml >}}
 
 The metric selected to evaluate the performance of the filters is the classical Root Mean Squared Error (RMSE) defined as:
@@ -292,7 +292,7 @@ Where \\( N \\) is the number of iterations, \\( \hat{x}_i \\) is the filter est
 The entire code for the validation, including figures, can be found in the notebook `ekf_vs_ukf.ipynb`. The following figure shows the estimated state at each frame averaged by the number of iterations.
 
 {{< rawhtml >}}
-<iframe src="/posts/images/mean_state.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+<iframe src="/mean_state.html" width=800 height=600 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
 {{< /rawhtml >}}
 
 As seen in the results, the EKF initially demonstrates faster convergence, particularly for velocity estimation. However, when the target begins its turning maneuver, both filters struggle to keep up with the true position and turn rate estimations. This lag is anticipated because the CTRV motion model does not account for changes in turn rate.
@@ -304,7 +304,7 @@ As designers, we can enhance the performance of both filters by increasing the p
 To further illustrate our findings, the following figure displays the root mean square error (RMSE) over time for position (combining X and Y), heading, velocity, and turn rate.
 
 {{< rawhtml >}}
-<iframe src="/posts/images/rmse_comparison.html" width=800 height=800 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
+<iframe src="/rmse_comparison.html" width=800 height=800 allowTransparency="true" frameborder="0" scrolling="no"></iframe>
 {{< /rawhtml >}}
 
 First, let's focus on the position RMSE. In practice, this is the most important metric, since a big error in position could lead to misassociation and track loss which is critical for many applications. Overall, both filters offer better position estimation that what the raw measurements provide. Obviously, this is expected and one of the advantages of using a KF for state estimation. 

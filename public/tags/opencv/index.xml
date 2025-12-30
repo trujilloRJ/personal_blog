@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Opencv on JT Blog</title>
+    <link>//localhost:1313/tags/opencv/</link>
+    <description>Recent content in Opencv on JT Blog</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 10 May 2025 15:06:40 +0200</lastBuildDate><atom:link href="//localhost:1313/tags/opencv/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Road segmentation with U-Net from monocular camera</title>
+      <link>//localhost:1313/posts/road-detection/</link>
+      <pubDate>Sat, 10 May 2025 15:06:40 +0200</pubDate>
+      
+      <guid>//localhost:1313/posts/road-detection/</guid>
+      <description>&lt;p&gt;Understanding where a vehicle can safely drive is essential for building autonomous driving systems. This involves segmenting lane markings, road edges, and drivable areas using inputs from sensors like cameras, LiDAR, or radar.&lt;/p&gt;
+&lt;p&gt;In this post, I explore how to tackle this using just a monocular camera and a neural network based on the U-Net architecture, originally developed for medical image segmentation. Detecting drivable road surfaces from raw RGB images is challenging as the model needs to be robust to lighting variations, shadows, and road conditions. To improve the model’s ability to generalize, I used data augmentation techniques that help it handle a wider variety of scenes.&lt;/p&gt;</description>
+      <content>&lt;p&gt;Understanding where a vehicle can safely drive is essential for building autonomous driving systems. This involves segmenting lane markings, road edges, and drivable areas using inputs from sensors like cameras, LiDAR, or radar.&lt;/p&gt;
+&lt;p&gt;In this post, I explore how to tackle this using just a monocular camera and a neural network based on the U-Net architecture, originally developed for medical image segmentation. Detecting drivable road surfaces from raw RGB images is challenging as the model needs to be robust to lighting variations, shadows, and road conditions. To improve the model’s ability to generalize, I used data augmentation techniques that help it handle a wider variety of scenes.&lt;/p&gt;
+&lt;h2 id=&#34;source-code&#34;&gt;Source code&lt;/h2&gt;
+&lt;p&gt;The source code for this post is available at: &lt;a href=&#34;https://github.com/trujilloRJ/lane-detection&#34;&gt;https://github.com/trujilloRJ/lane-detection&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id=&#34;table-of-contents&#34;&gt;Table of Contents&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/road-detection/#dataset&#34;&gt;Dataset&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/road-detection/#model-architecture&#34;&gt;Model architecture&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/road-detection/#training-details&#34;&gt;Training details&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/road-detection/#results-and-discussion&#34;&gt;Results and discussion&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id=&#34;dataset&#34;&gt;Dataset&lt;/h1&gt;
+&lt;p&gt;We&amp;rsquo;re working with data from the  &lt;a href=&#34;https://www.cvlibs.net/datasets/kitti/eval_road.php&#34;&gt;KITTI road detection challenge&lt;/a&gt;, a benchmark dataset designed for evaluating road scene understanding in autonomous driving. It features real-world driving scenarios captured in both urban and highway environments.&lt;/p&gt;
+&lt;p&gt;Each image in the dataset comes with a corresponding binary mask that labels which pixels belong to the drivable road surface. In the example below, the road mask is overlaid in green. Notice how the mask highlights only the road intended for the ego-vehicle while excluding the opposite lane. This distinction is important: we’re not just detecting roads in general, we’re identifying where our vehicle can actually drive.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/road_example.png&#34; alt=&#34;Example lane&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The model outputs a pixel-wise classification map—basically, an image-sized grid where each pixel is labeled as either “road” or “not road.” In computer vision, this kind of task is called &lt;strong&gt;semantic segmentation&lt;/strong&gt;. It’s a common approach not only in autonomous driving but also in fields like medical imaging, where it’s used to identify things like tumors in scans.&lt;/p&gt;
+&lt;p&gt;One architecture that has consistently shown strong performance in segmentation tasks is the &lt;a href=&#34;https://arxiv.org/abs/1505.04597&#34;&gt;U-Net&lt;/a&gt;. Originally developed for biomedical image segmentation, U-Net’s encoder-decoder structure with skip connections makes it well-suited for capturing both high-level context and fine-grained details. In this post, we’ll see how this architecture can be effectively applied to automotive scenes as well.&lt;/p&gt;
+&lt;h1 id=&#34;model-architecture&#34;&gt;Model architecture&lt;/h1&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/diagrams/UNet.png&#34; alt=&#34;Example lane&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The figure shows the baseline architecture used for our prediction model, which is a simplified version of the U-Net. While the original U-Net includes four downsampling and upsampling blocks with a larger number of channels to handle multi-class segmentation, our version is lighter, using only three blocks and fewer channels. This reduction is sufficient for our task, as we only need to segment a single class—drivable road—rather than multiple classes.&lt;/p&gt;
+&lt;p&gt;A key and innovative feature of the U-Net architecture is the use of skip connections, illustrated in the figure with dashed lines. These connections link the output of each downsampling block directly to the corresponding upsampling block in the expanding path by concatenating their feature maps. This design helps preserve spatial information that is lost during downsampling.&lt;/p&gt;
+&lt;h1 id=&#34;training-details&#34;&gt;Training details&lt;/h1&gt;
+&lt;p&gt;Before jumping into the results, I want to briefly go through the training process and methodology. Often, these details are overlooked in articles, and, in my opinion, they are critical to ensure good performance.&lt;/p&gt;
+&lt;h4 id=&#34;loss-function&#34;&gt;Loss function&lt;/h4&gt;
+&lt;p&gt;To train the model effectively, we need a loss function that captures how much our predicted segmentation map differs from the ground truth. A natural starting point is the well-known Binary Cross-Entropy (BCE) loss, which works well for binary classification tasks.&lt;/p&gt;
+&lt;p&gt;However, in road segmentation, we run into a common problem: class imbalance. The drivable road typically takes up a much smaller portion of the image compared to the background. As a result, BCE can produce deceptively good results just by favoring the majority class, the background.&lt;/p&gt;
+&lt;p&gt;A better alternative for segmentation tasks is the Dice loss, which directly measures the overlap between the predicted road pixels and the ground truth. Mathematically, it’s a version of the Dice coefficient:&lt;/p&gt;
+$$Dice = \frac{|X\cap Y|}{X + Y}$$&lt;p&gt;
+It’s particularly effective in imbalanced scenarios because it focuses on correctly predicting the minority class—in our case, the road pixels.&lt;/p&gt;
+&lt;p&gt;Finally, the loss used for training is a combination of BCE and Dice, known in the literature as &lt;strong&gt;Combo&lt;/strong&gt; loss:&lt;/p&gt;
+$$L = BCE + Dice$$&lt;h4 id=&#34;batch-size&#34;&gt;Batch size&lt;/h4&gt;
+&lt;p&gt;Next, we need to select an appropriate mini-batch size. Smaller batches work well with limited GPU memory but can produce noisier gradient updates and slower convergence. However, noisy gradients aren&amp;rsquo;t always a drawback—they can improve generalization by preventing the model from overfitting, which is especially beneficial when training on a small dataset, as in our case. Larger batch sizes offer more stable gradients and faster training but require more memory and can overfit if not carefully tuned. Given our limited dataset and GPU resources, we opted for a very small batch size of &lt;code&gt;2&lt;/code&gt;.&lt;/p&gt;
+&lt;h4 id=&#34;learning-rate&#34;&gt;Learning rate&lt;/h4&gt;
+&lt;p&gt;Once the batch size is set, the next step is selecting the learning rate, arguably &lt;a href=&#34;https://www.deeplearningbook.org/&#34;&gt;the most important hyperparameter&lt;/a&gt;. A common starting point is &lt;code&gt;3e-4&lt;/code&gt;, known as &amp;ldquo;Karpathy’s constant,&amp;rdquo; popularized by Andrej Karpathy in one of his &lt;a href=&#34;https://x.com/karpathy/status/933763912045965312&#34;&gt;tweets&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;However, we could use a more informed approach: the learning rate range test. Proposed by researcher Leslie Smith in his well-known &lt;a href=&#34;https://arxiv.org/abs/1506.01186&#34;&gt;paper&lt;/a&gt;, this method involves starting with a very low learning rate and gradually increasing it after each batch iteration. By plotting the training loss against the learning rate, we can observe where the loss begins to decrease sharply and where it starts to rise again. The optimal learning rate typically lies just before the loss begins to increase.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/lr_range_test.png&#34; alt=&#34;Example lane&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The figure shows the result of the LR range test for our dataset. As observed, the training loss decreases steadily and then begins to rise sharply after a certain value around &lt;code&gt;0.1&lt;/code&gt;. Based on this curve, we selected a starting learning rate of &lt;code&gt;1e-4&lt;/code&gt; (very close to the empirical Karpathy&amp;rsquo;s constant 😊), which lies just before the loss starts to diverge. This choice tries to maximize learning efficiency while maintaining training stability.&lt;/p&gt;
+&lt;h4 id=&#34;optimizer&#34;&gt;Optimizer&lt;/h4&gt;
+&lt;p&gt;For optimization, I choose &lt;strong&gt;Adam&lt;/strong&gt;. While Stochastic Gradient Descent (SGD) with momentum can outperform Adam when finely tuned, Adam is more robust to suboptimal hyperparameters and generally performs well out of the box. Since I’m not running extensive hyperparameter searches, Adam is the practical choice for this experiment.&lt;/p&gt;
+&lt;h4 id=&#34;scheduler&#34;&gt;Scheduler&lt;/h4&gt;
+&lt;p&gt;Finally, let’s talk about learning rate schedulers. For this experiment, I’m using the &lt;strong&gt;One-Cycle&lt;/strong&gt; policy, introduced in the &lt;a href=&#34;https://arxiv.org/abs/1708.07120&#34;&gt;super convergence paper&lt;/a&gt; by Leslie Smith. The idea is to start training with a gradually increasing learning rate (a “warm-up”), followed by a steady decrease to very low values.&lt;/p&gt;
+&lt;p&gt;The intuition is that high learning rates early on help the optimizer escape sharp, narrow minima, encouraging convergence toward wider, flatter ones—which are known to generalize better. By finishing with a low learning rate, the model can fine-tune within that broad minimum, improving its robustness to unseen data. The learning rate range test give us insights to select the maximum learning rate for the One-Cycle policy. I choose &lt;code&gt;1e-3&lt;/code&gt; as a sensible value before the loss starts increasing.&lt;/p&gt;
+&lt;p&gt;The following table summarizes the training parameter selection:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Parameter&lt;/th&gt;
+          &lt;th&gt;Value&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Loss&lt;/td&gt;
+          &lt;td&gt;Combo (BCE + Dice)&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Batch size&lt;/td&gt;
+          &lt;td&gt;2&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Initial learning rate&lt;/td&gt;
+          &lt;td&gt;1e-4&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Optimizer&lt;/td&gt;
+          &lt;td&gt;AdamW&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Scheduler&lt;/td&gt;
+          &lt;td&gt;One-Cycle policy&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h1 id=&#34;results-and-discussion&#34;&gt;Results and discussion&lt;/h1&gt;
+&lt;h4 id=&#34;baseline-model&#34;&gt;Baseline model&lt;/h4&gt;
+&lt;p&gt;Starting with a simple baseline model helps us understand the problem better and provides a foundation to improve upon. For this, we used just 2 downsampling and upsampling blocks with feature channels &lt;code&gt;(32, 64, 128)&lt;/code&gt; in the contracting and expanding paths.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/loss_fn_2d.png&#34; alt=&#34;Loss&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The figure shows training and validation loss over epochs. Despite some noisy validation loss early on—likely due to the small batch size and one-cycle scheduler—the model converges well. The best validation loss occurs at epoch &lt;code&gt;65&lt;/code&gt;, and the model parameters from this point were saved for evaluation.&lt;/p&gt;
+&lt;p&gt;Loss doesn’t fully reflect model performance, we need a more interpretable metric, so we also consider precision and recall. The ROC curve below for the best model iteration shows promising results for our baseline model—with both precision and recall exceeding &lt;code&gt;90%&lt;/code&gt;.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/auc_2d.png&#34; alt=&#34;Loss&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 400px&#34; &gt;
+
+
+&lt;p&gt;Let&amp;rsquo;s continue with the evaluation by looking at two examples.&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/good_2d.png&#34; alt=&#34;ex00&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/bad_2d.png&#34; alt=&#34;ex02&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+&lt;/p&gt;
+&lt;p&gt;The first example illustrates a scene where the network accurately predicts the drivable road. In contrast, the second example features two roads, but only one is drivable. Here, the network correctly identifies most of the drivable road but mistakenly classifies the opposite road as drivable and misses some pixels on the actual road.&lt;/p&gt;
+&lt;h4 id=&#34;extending-our-model&#34;&gt;Extending our model&lt;/h4&gt;
+&lt;p&gt;Let’s take it a step further by increasing the model depth—adding one more downsampling and upsampling block. This expands the feature channels to &lt;code&gt;(32, 64, 128, 256)&lt;/code&gt;. The goal is that a deeper U-Net with a larger receptive field will deliver better predictions than the baseline model.&lt;/p&gt;
+&lt;p&gt;The plot below compares the loss of the new deeper model against the baseline shallow one. It’s clear that the deeper model converges faster and reaches a significantly lower validation loss by epoch &lt;code&gt;59&lt;/code&gt;.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/compare_loss.png&#34; alt=&#34;Loss&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;Performance-wise, the improvements are clear in the same example as before. The deeper model delivers a much more accurate road prediction and avoids confusing the opposite, non-drivable lane.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/good_3d.png&#34; alt=&#34;ex02&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;These results are also valid to the whole validation dataset with a higher ROC Area Under the Curve score:&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/compare_roc.png&#34; alt=&#34;compare_roc&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 400px&#34; &gt;
+
+
+&lt;h4 id=&#34;data-augmentation&#34;&gt;Data augmentation&lt;/h4&gt;
+&lt;p&gt;While reviewing some challenging cases, I noticed the model struggled with variable lighting conditions that altered the road’s color from the usual appearance. This suggests the model was relying too heavily on color cues to detect roads. A good way to address this is to expand the training data with varied lighting scenarios, encouraging the model to focus more on shape than color. We can simulate this by applying data augmentation techniques.&lt;/p&gt;
+&lt;p&gt;For this, I used the library &lt;a href=&#34;https://albumentations.ai/&#34;&gt;&lt;strong&gt;albumentations&lt;/strong&gt;&lt;/a&gt; as it offers a wide range of transformations like scaling, rotation, color shifting and many more that comes handy for computer visions tasks. In adittion, it integrates easily with Pytorch. Specifically, applying random color shifting transformations to our data can help the model become more robust to varying lighting conditions and improve its generalization.&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/compare_loss_aug.png&#34; alt=&#34;compare_aug&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The figure shows the loss evolution for the deeper model with and without data augmentation. Including augmentation leads to a slightly lower validation loss. Interestingly, the training loss at the point of lowest validation loss is higher with augmentation, indicating less overfitting and better generalization—exactly what we want from data augmentation.&lt;/p&gt;
+&lt;p&gt;Here’s one of the toughest examples from the dataset. The top image shows predictions from the deeper model trained without data augmentation, while the bottom shows the same model trained with augmentation.&lt;/p&gt;
+&lt;p&gt;Without augmentation, the model struggles with low recall—missing much of the drivable road, likely due to heavy shadows cast by nearby buildings. It even mistakes parts of the building for road, since the color and shape features are similar.&lt;/p&gt;
+&lt;p&gt;With data augmentation, recall improves significantly, showing better robustness to lighting changes. However, the model still confuses the building for drivable road in some areas.&lt;/p&gt;
+&lt;p&gt;This challenge remains open for now, but potential solutions include (i) experimenting with more diverse data augmentations and longer training, and (ii) increasing model depth to capture more complex features.&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/bad_3d.png&#34; alt=&#34;ex00&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/good_aug.png&#34; alt=&#34;ex02&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+&lt;/p&gt;
+&lt;h4 id=&#34;model-size&#34;&gt;Model size&lt;/h4&gt;
+&lt;p&gt;Model size and memory requirements are crucial factors, especially when deploying to platforms with limited resources or when real-time inference is needed. Our baseline &amp;ldquo;shallow&amp;rdquo; U-Net, using feature channels &lt;code&gt;(32, 64, 128)&lt;/code&gt;, contains approximately 260K trainable parameters. In contrast, the deeper model—with an added downsampling/upsampling block and expanded channels &lt;code&gt;(32, 64, 128, 256)&lt;/code&gt;—has around 1 million parameters, roughly &lt;strong&gt;4× larger&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;This difference in size has practical implications. While the deeper model offers better performance, it demands significantly more memory and computation. On edge devices or embedded systems where latency, power consumption, or memory constraints are critical, the smaller model may be preferred—even if it means sacrificing some segmentation accuracy. Choosing the right model becomes a trade-off between performance and efficiency, depending on the target deployment scenario.&lt;/p&gt;
+&lt;p&gt;Here’s a final touch for some flair — a GIF showcasing the model in action on various road scenes:&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/road_detection_examples.gif&#34; alt=&#34;examples&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+</content>
+    </item>
+    
+    <item>
+      <title>Camera-based object tracking: An implementation of SORT algorithm</title>
+      <link>//localhost:1313/posts/object-tracking-sort/</link>
+      <pubDate>Fri, 28 Feb 2025 15:06:40 +0200</pubDate>
+      
+      <guid>//localhost:1313/posts/object-tracking-sort/</guid>
+      <description>&lt;image src=&#34;//localhost:1313/posts/images/introduction_sample.PNG&#34; alt=&#34;Example lane&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The image above depicts a typical automotive scene captured by a monocular camera at a specific time. The colored boxes represent object detections made by a CNN-based detector, such as &lt;a href=&#34;https://yolov8.com/#what-is&#34;&gt;YOLO&lt;/a&gt;, with each color indicating a different class—green for cars and dark blue for pedestrians. However, these detections are independent across frames since the object detector lacks memory, meaning it does not recognize that an object in one frame is the same in the next.&lt;/p&gt;</description>
+      <content>
+
+&lt;image src=&#34;//localhost:1313/posts/images/introduction_sample.PNG&#34; alt=&#34;Example lane&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px&#34; &gt;
+
+
+&lt;p&gt;The image above depicts a typical automotive scene captured by a monocular camera at a specific time. The colored boxes represent object detections made by a CNN-based detector, such as &lt;a href=&#34;https://yolov8.com/#what-is&#34;&gt;YOLO&lt;/a&gt;, with each color indicating a different class—green for cars and dark blue for pedestrians. However, these detections are independent across frames since the object detector lacks memory, meaning it does not recognize that an object in one frame is the same in the next.&lt;/p&gt;
+&lt;p&gt;In automotive applications, detecting objects in isolation is not sufficient. To enable functions like collision avoidance, path planning, and autonomous navigation, it is crucial to consistently identify and track objects as they move through consecutive frames. This process, known as object tracking, assigns a unique identity to each detected object, ensuring continuity and a more comprehensive understanding of the dynamic environment.&lt;/p&gt;
+&lt;p&gt;In this post, we will explore key concepts of object tracking and present its flow diagram to illustrate the process. Additionally, we will implement a simple yet effective object tracker, widely recognized in the community as the Simple Online and Realtime Tracker &lt;a href=&#34;https://arxiv.org/abs/1602.00763&#34;&gt;(SORT)&lt;/a&gt;, demonstrating its practical applications to the KITTI object tracking dataset.&lt;/p&gt;
+&lt;h2 id=&#34;source-code&#34;&gt;Source code&lt;/h2&gt;
+&lt;p&gt;The source code for the object tracker is available at: &lt;a href=&#34;https://github.com/trujilloRJ/sort_based_object_tracking&#34;&gt;https://github.com/trujilloRJ/sort_based_object_tracking&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id=&#34;table-of-contents&#34;&gt;Table of Contents&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#system-overview&#34;&gt;System overview&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#state-space-model&#34;&gt;State-space model&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#association-stage&#34;&gt;Association stage&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#after-association&#34;&gt;After association&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#results&#34;&gt;Results&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/object-tracking-sort/#conclusions-and-next-steps&#34;&gt;Conclusions and next steps&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id=&#34;system-overview&#34;&gt;System overview&lt;/h1&gt;
+&lt;p&gt;Let&amp;rsquo;s begin with an overview of the core steps involved in any tracking system. Later sections will delve deeper into each stage and how SORT specifically implements them.&lt;/p&gt;
+&lt;p&gt;The following figure illustrates the key stages of a tracking system, which operates on a frame-by-frame basis. Initially, no tracks exist; only detections from the current frame are available. These detections may correspond to real objects or false positives. To account for this uncertainty, the system creates &amp;ldquo;tentative&amp;rdquo; tracks for all detections. Over subsequent frames, these tentative tracks are either promoted to established tracks or discarded based on their consistency in being associated with new detections.&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/SORT_diagram.png&#34; alt=&#34;Tracking diagram&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 1200px;&#34; &gt;
+
+
+Core tracking system diagram.&lt;/p&gt;
+&lt;p&gt;This method operates under the assumption that false positives are unlikely to persist across multiple frames. However, this introduces a fundamental trade-off: delaying the promotion or removal of tentative tracks enhances precision but slows down track establishment. In automotive applications, this delay can be critical, as rapid responsiveness is essential for safety and performance.&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Predict tracks next state&lt;/strong&gt;: Once tracks are created and new frame detections become available, the first step is to predict the positions of the existing tracks. This requires assuming a motion model for the objects and using it to estimate their future positions over time. Typically, a track&amp;rsquo;s state—comprising its position, kinematics and size—is represented within a Kalman Filter (KF) framework. The KF propagates the estimated states and their covariance, capturing the uncertainty in the prediction.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Detections-to-tracks association&lt;/strong&gt;: At this stage, we have a predicted location for each tracked object and a set of detections from the object detector for the current frame. The next step is to associate these detections with the existing tracks to update their state. The association process is based on the likelihood of a match, typically determined by the spatial proximity between a detection and a predicted track location.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Update matched track states&lt;/strong&gt;: Once detections have been assigned to tracks, the next step is to update the state of each matched track using the corresponding detection. This follows the standard KF framework, where the detected position serves as new information to refine our estimates of the track’s state, including its position, kinematics and size.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Initialize new tracks from unmatched detections&lt;/strong&gt;: Any detection that was not assigned to an existing track is used to create a new &amp;ldquo;tentative&amp;rdquo; track. As previously mentioned, these tentative tracks will either be promoted or removed after a few frames based on their consistency.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Track management&lt;/strong&gt;: The final step involves maintaining the set of active tracks. This includes removing tracks that have exited the scene or remained unmatched for an extended period, promoting tentative and performing other optional refinements to enhance tracking stability.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id=&#34;state-space-model&#34;&gt;State-space model&lt;/h1&gt;
+&lt;p&gt;Each track represents an object modeled as a 2D box and parametrized by the following state:&lt;/p&gt;
+$$\bold{x_k}=[x, y, w, h, v_x, v_y, \dot{w}, \dot{h}]^T$$&lt;p&gt;Where the subscript \(k\) represents the time index and:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;\(x\) and \(y\) denote the coordinates of the box center, given in pixels, with (0, 0) at the bottom-left corner of the image,&lt;/li&gt;
+&lt;li&gt;\(w\) and \(h\) represent the width and height of the box in pixels, respectively,&lt;/li&gt;
+&lt;li&gt;\(v_x\) and \(v_y\) capture the velocities of the box center,&lt;/li&gt;
+&lt;li&gt;and \(\dot{w}\) and \(\dot{h}\) describe the rate of change of the box&amp;rsquo;s width and height, respectively.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Obviously, the real-world width and height of an object remain constant, but here we represent size in image coordinates, which do change as the object moves closer to or further from the camera. For this reason, we include the rate of change in size as part of the state to capture this effect.&lt;/p&gt;
+&lt;p&gt;It’s worth noting that the original SORT implementation uses a different state representation for object size. Instead of width and height, it models size using scale (area) and aspect ratio, assuming the aspect ratio remains constant. However, this assumption doesn’t hold in all scenarios—consider a car turning at an intersection. As it transitions from moving longitudinally to laterally relative to the camera, the aspect ratio of its bounding box can change significantly. To address this limitation, I opted for a different representation of box size, using explicit width and height instead.&lt;/p&gt;
+&lt;h2 id=&#34;motion-model&#34;&gt;Motion model&lt;/h2&gt;
+&lt;p&gt;A simple constant velocity (CV) motion model is assumed. This model is a linear function of the state and is defined with the following transition matrix \(\bold{F}\)&lt;/p&gt;
+
+
+$$
+\bold{F}=
+\begin{bmatrix}
+1 &amp; 0 &amp; 0 &amp; 0 &amp; \Delta T &amp; 0 &amp; 0 &amp; 0
+\\\
+0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; \Delta T &amp; 0 &amp; 0
+\\\
+0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; \Delta T &amp; 0
+\\\
+0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; \Delta T
+\\\
+0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0
+\\\
+0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0
+\\\
+0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1 &amp; 0
+\\\
+0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 1
+\end{bmatrix}
+$$
+
+
+&lt;p&gt;Such that, we can predict the next state as:&lt;/p&gt;
+$$\bold{\hat{x}_{k+1}}=\bold{F}\bold{x_k}$$&lt;p&gt;This motion model isn’t entirely realistic, as it can’t capture all the maneuvers automotive objects might perform—such as acceleration or turning. Additionally, due to the motion of the host vehicle, even stationary objects can exhibit non-CV motion in the image frame. One alternative is to use more expressive models, like Constant Turn Rate (CTR) or Constant Acceleration (CA). While this is an interesting direction, we’ll stick with the simpler CV model in this post to maintain coherence with the original SORT design. For a deeper dive into motion models, check out this post: &lt;a href=&#34;https://blogjtr.com/posts/ekf-vs-ukf/&#34;&gt;EKF vs. UKF&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Another approach to mitigate the impact of an imperfect motion modelling is to inject noise to the prediciton. This is a common practice in almost all KF designs and it&amp;rsquo;s referred to as process noise or plant noise, depending on the field.&lt;/p&gt;
+&lt;p&gt;But how should we model this noise, and how much should we add? That largely depends on the specific application and how confident we are in the chosen motion model. Ultimately, the process noise is a design parameter that deserves its own blog post. For our application, we model the process noise as additive white Gaussian noise with no correlation between its components. This type of noise is defined as:&lt;/p&gt;
+$$\bold{\bold{\nu}}=\mathcal{N}(\bold{0}, \bold{Q})$$&lt;p&gt;Where \(\bold{Q}\) is a diagonal matrix representing the noise covariance:&lt;/p&gt;
+$$\bold{Q} = diag([4, ..., 4])$$&lt;p&gt;With the motion model defined, both the track state and track covariance can be predicted as:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;State propagation: $$\bold{\hat{x}_{k+1}}=\bold{F}\bold{x_k}$$&lt;/li&gt;
+&lt;li&gt;Covariance propagation: $$\bold{\hat{P}_{k+1}} = \bold{F}\bold{P_k}\bold{F} + \bold{Q}$$&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id=&#34;association-stage&#34;&gt;Association stage&lt;/h1&gt;
+&lt;p&gt;Now that we’ve predicted where our tracks are likely to be in the current frame, the next step is to incorporate new information from the detections proposed by the object detector. The goal of the association stage is to link these new detections to existing tracks.&lt;/p&gt;
+&lt;p&gt;To do this, we need some form of &lt;em&gt;association score&lt;/em&gt;—a metric that reflects the likelihood that a given detection corresponds to a tracked object. Ideally, this score should be high when a detection and a track are (i) spatially close and (ii) have similar sizes.&lt;/p&gt;
+&lt;p&gt;We can encode both of these conditions using the Intersection over Union (IoU) metric. This metric is widely used in the computer vision and perception communities and is the one adopted in the original SORT paper. While many readers are likely already familiar with IoU, for the sake of completeness, I’ll illustrate it in the following figure:&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/iou_definition.png&#34; alt=&#34;iou_definition&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 400px;&#34; &gt;
+
+
+Illustration of Intersection over Union (IoU).&lt;/p&gt;
+&lt;p&gt;As the first step in the association stage, we compute the IoU between all possible combinations of tracks and detections. This results in an association matrix, where each entry represents the IoU score for a given combination, and is used to assign detections to tracks. Naturally, combinations with an IoU of 0 represent very unlikely associations, while those with an IoU of 1 are highly likely.&lt;/p&gt;
+&lt;p&gt;A naive, greedy approach might be to simply assign each track the detection with the highest IoU, assuming it&amp;rsquo;s the most likely association. However, this method may not always be optimal. Consider the following example:&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/hungarian.png&#34; alt=&#34;hungarian assignment&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 600px;&#34; &gt;
+
+
+Example of assignment conflict.&lt;/p&gt;
+&lt;p&gt;In this scenario, the blue boxes represent tracks A and B, while the red boxes represent detections 1 and 2. Following the greedy assignment approach, detection 2 will be matched to track A, while track B and detection 1 will be left unmatched. As a result, track B won&amp;rsquo;t be updated in this frame, which could lead to a track loss in subsequent frames. Furthermore, detection 1, being unmatched, will be used to create a new track.&lt;/p&gt;
+&lt;p&gt;A better assignment strategy would be to match track A with detection 1 and track B with detection 2. This way, both tracks are updated, and no new track is created. In fact, this approach also makes more sense when we aim to maximize the global score rather than the local one. The global score for this assignment is 0.2 + 0.2 = 0.4, compared to 0.3 with the greedy approach.&lt;/p&gt;
+&lt;p&gt;In other words, it&amp;rsquo;s better to perform the assignment in a global manner. To achieve this, the authors of SORT proposed using &lt;a href=&#34;https://en.wikipedia.org/wiki/Hungarian_algorithm&#34;&gt;Hungarian method&lt;/a&gt;, a combinatorial optimization algorithm that solves the assignment problem by maximizing the global score. In Python, &lt;code&gt;scipy&lt;/code&gt; package implements the Hungarian algorithm with the function &lt;a href=&#34;https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html&#34;&gt;&lt;code&gt;scipy.optimize.linear_sum_assignment&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
+&lt;h4 id=&#34;a-note-about-advanced-association-algorithms&#34;&gt;A note about advanced association algorithms&lt;/h4&gt;
+&lt;p&gt;Association is the most critical stage in the object tracking cycle and it remains an open research topic.  In particular, there are numerous proposals for association scores, and the latest state-of-the-art (SOTA) object tracking algorithms rely on advanced association metrics. Many contributions have explored using Deep Learning to extract relevant features from each detection and encode them into more sophisticated association scores.&lt;/p&gt;
+&lt;p&gt;The &lt;a href=&#34;https://arxiv.org/abs/1703.07402&#34;&gt;Deep SORT&lt;/a&gt; paper is an extension of the SORT algorithm using that incorporates a deep association metric, significantly improving performance across nearly all benchmark datasets.&lt;/p&gt;
+&lt;h1 id=&#34;after-association&#34;&gt;After association&lt;/h1&gt;
+&lt;p&gt;At this stage in the tracking cycle, we have:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Unmatched tracks&lt;/strong&gt;: Tracks that were not associated with any detection and will not be updated.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Unmatched detections&lt;/strong&gt;: Detections that were not associated with any track. We will create new tentative tracks from them.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Matched tracks&lt;/strong&gt;: Tracks that were associated with a detection and will be updated according to the KF framework.&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id=&#34;track-udpate&#34;&gt;Track udpate&lt;/h4&gt;
+&lt;p&gt;Assuming the reader is familiar with the Kalman filter, I will briefly cover the update stage, more details can be found in &lt;a href=&#34;https://blogjtr.com/posts/ekf-vs-ukf/&#34;&gt;EKF vs. UKF&lt;/a&gt;. The associated detection box (also called measurement) provides information about box center and size:&lt;/p&gt;
+$$\bold{z_k}=[z_x, z_y, z_w, z_h]$$&lt;p&gt;The track state contains also velocities, so we need a &lt;em&gt;measurement function&lt;/em&gt; \(\bold{H}\)  that maps between state space and measurement space. This allows us to predict the measurement based on our track state \(\bold{\hat{z}_k}\):&lt;/p&gt;
+
+
+$$\bold{\hat{z}_k}=\bold{H}\bold{\hat{x}_{k+1}}$$
+
+
+
+
+$$
+\bold{H}=
+\begin{bmatrix}
+1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0
+\\\
+0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0
+\\\
+0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0 &amp; 0
+\\\
+0 &amp; 0 &amp; 0 &amp; 1 &amp; 0 &amp; 0 &amp; 0 &amp; 0
+\end{bmatrix}
+$$
+
+
+&lt;p&gt;The difference between predicted and real measurement is called innovation&lt;/p&gt;
+$$\bold{y_k}=\bold{z_{k+1}} - \bold{\hat{z}_{k+1}}$$&lt;p&gt;and it is used to update the track state, weighted by the Kalman gain \(\bold{K_k}\). In simple terms, the Kalman gain is computed based on the estimated covariances for the state \(\bold{\hat{P}_{k+1}}\) and measurement noise coaviance \(\bold{R}\). The complete update step is described as:&lt;/p&gt;
+$$ \bold{y_k}=\bold{z_{k+1}} - \bold{H}\bold{\hat{x}_{k+1}} $$$$ \bold{K_k} = \bold{\hat{P}_{k+1}}\bold{H^T_k}(\bold{H_k}\bold{\hat{P}\_{k+1}}\bold{H^T_k} + \bold{R})^{-1} $$$$ \bold{x_{k+1}} = \bold{\hat{x}\_{k+1}} + \bold{K_k}\bold{y_k}   $$$$ \bold{P_{k+1}} = (\bold{I_{n_x}} - \bold{K_k}\bold{H_k})\bold{\hat{P}\_{k+1}} $$&lt;p&gt;The measurement covariance matrix \(\bold{R}\) models the estimated error for the detection boxes, accounting for both center and size in pixel units. In other applications, the filter designer might make an informed guess about these errors based on sensor characteristics, such as radar range and azimuth resolution. However, in this camera-based application, the measurements are derived from an object detector neural network, and it&amp;rsquo;s difficult to characterize them without extensive statistical analysis.&lt;/p&gt;
+&lt;p&gt;Ultimately, just like the process noise \(\bold{Q}\), the measurement covariance is also a design parameter. For this application, we set it as:&lt;/p&gt;
+$$\bold{R} = diag\([1, 1, 4, 4]\)$$&lt;h4 id=&#34;track-management&#34;&gt;Track management&lt;/h4&gt;
+&lt;p&gt;Finally, in this last stage, we manage the current track list. Some of the tasks involved include:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Promoting tentative tracks to primary tracks.&lt;/li&gt;
+&lt;li&gt;Deleting tracks that have remained unmatched for a number of consecutive cycles.&lt;/li&gt;
+&lt;li&gt;Removing tracks that are exiting the camera&amp;rsquo;s field of view.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h1 id=&#34;results&#34;&gt;Results&lt;/h1&gt;
+&lt;p&gt;For a quick example, the following .gif illustrates our tracking system working in an urban scenario. Each track is represented by a box with a unique color, and is identified by a number in the top-left corner of the box.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;//localhost:1313/posts/images/0013_output_video.gif&#34; alt=&#34;Ego turning&#34;&gt;&lt;/p&gt;
+&lt;p&gt;t is evident that the tracker successfully detects all the objects in the scene, including in-lane vehicles, parked cars, and oncoming cars in the adjacent lane. However, upon closer inspection, there are some false tracks, mostly due to false detections. Towards the end of the sequence, we can see how the track for the parked car (ID 714) is maintained during an occlusion phase, with an oncoming track (ID 692) temporarily covering it. However, this does not happen with other parked cars. Occlusion remains one of the main challenges in camera-based object tracking, and more on that will be discussed in the conclusions.&lt;/p&gt;
+&lt;h4 id=&#34;metrics&#34;&gt;Metrics&lt;/h4&gt;
+&lt;p&gt;Beyond visual inpsection, we need to evaluate our tracker comprehensively. For this, we use the &lt;a href=&#34;https://www.cvlibs.net/datasets/kitti/eval_tracking.php&#34;&gt;KITTI object tracking dataset&lt;/a&gt; which is an established benchmark in the automotive and vision communities.&lt;/p&gt;
+&lt;p&gt;There are a daunting number of KPI and evaluation metrics for object tracking. Since it&amp;rsquo;s challenging to assess such a complex task with a single value, multiple metrics are typically employed to determine the overall performance of a tracking system and provide insights into its strengths and weaknesses. The most widely adopted metric is the &lt;a href=&#34;https://arxiv.org/abs/2009.07736&#34;&gt;Higher Order Tracking Accuracy (HOTA)&lt;/a&gt;. If you check the &lt;a href=&#34;https://www.cvlibs.net/datasets/kitti/eval_tracking.php&#34;&gt;object tracking ranking&lt;/a&gt; on the KITTI website you&amp;rsquo;ll notice that algorithms are ranked based on their HOTA score.&lt;/p&gt;
+&lt;p&gt;Following these guidelines, we’ve selected four key metrics to characterize our object tracking system:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;HOTA: Combines aspects of localization, association, and detection in one single score.&lt;/li&gt;
+&lt;li&gt;AssA (Association Accuracy): Assesses how well the detected objects are matched across different frames.&lt;/li&gt;
+&lt;li&gt;DetA (Detection Accuracy): Evaluates how well the objects are detected within the frames.&lt;/li&gt;
+&lt;li&gt;LocA (Localization Accuracy): Measures the accuracy of the localized position of detected objects.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;All of these metrics offer values between 0 and 100, with higher values indicating better performance. To compute the metrics, we use the &lt;a href=&#34;https://github.com/JonathonLuiten/TrackEval&#34;&gt;object tracking evaluation kit&lt;/a&gt;, which integrates all the tracking metrics and supports benchmarks like KITTI and &lt;a href=&#34;https://motchallenge.net/&#34;&gt;MOTChallenge&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The following table shows the evaluation for our tracking system:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Class&lt;/th&gt;
+          &lt;th&gt;HOTA&lt;/th&gt;
+          &lt;th&gt;AssA&lt;/th&gt;
+          &lt;th&gt;DetA&lt;/th&gt;
+          &lt;th&gt;LocA&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Car&lt;/td&gt;
+          &lt;td&gt;46.61&lt;/td&gt;
+          &lt;td&gt;49.33&lt;/td&gt;
+          &lt;td&gt;44.81&lt;/td&gt;
+          &lt;td&gt;79.54&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Pedestrian&lt;/td&gt;
+          &lt;td&gt;33.17&lt;/td&gt;
+          &lt;td&gt;29.81&lt;/td&gt;
+          &lt;td&gt;37.24&lt;/td&gt;
+          &lt;td&gt;76.43&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;Without any reference, it’s difficult to extract meaningful insights from these results. For example, SOTA object tracking algorithms like &lt;a href=&#34;https://arxiv.org/abs/2409.16149&#34;&gt;MCTrack&lt;/a&gt; and &lt;a href=&#34;https://arxiv.org/abs/2501.01275&#34;&gt;HybridTrack&lt;/a&gt; achieve impressive HOTA scores above 80 for cars in the KITTI dataset. In the same ranking, the original SORT algorithm achieves a car HOTA score of 43, which aligns with our results.&lt;/p&gt;
+&lt;p&gt;While current SOTA object tracking algorithms achieve significantly better performance compared to SORT, they come with much higher computational costs and all require a pre-training stage. This is because they rely on Deep Learning to enhance the association stage, necessitating training. In contrast, SORT has the clear advantage of being fast, lightweight, and relatively easy to implement and debug, while still achieving decent performance.&lt;/p&gt;
+&lt;h4 id=&#34;improvements-priority-and-class-based-association&#34;&gt;Improvements: Priority and class-based association&lt;/h4&gt;
+&lt;p&gt;After the first evaluation, we inspect scenarios where our tracking system performs poorly. One recurrent issue is a conflict in the association between tentative and primary tracks. The problem, as illustrated in the following figure, can be explained as follows:&lt;/p&gt;
+&lt;p&gt;
+
+&lt;image src=&#34;//localhost:1313/posts/images/example_association.png&#34; alt=&#34;example association&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 400px;&#34; &gt;
+
+
+Example of false detection.&lt;/p&gt;
+&lt;p&gt;In some frames, an additional false detection occurs around an object, as indicated by the green box in the figure. This results in the creation of a new tentative track from this false detection. In the next frame, only the two detections from the cars are present, but there are three tracks: the two primary ones (ID 11 and ID 81) and the newly created tentative track. This can lead to a conflict in the association assignment, potentially causing track degradation and, eventually, track loss.&lt;/p&gt;
+&lt;p&gt;One solution to this problem is to penalize tentative tracks during the association process. In other words, we can prioritize association with primary tracks over tentative ones. This can be easily implemented by first associating primary tracks and then associating tentative tracks. This approach ensures that no tentative tracks claim detections that could otherwise be associated with primary tracks.&lt;/p&gt;
+&lt;p&gt;Additionally, we introduced a class-based association. Since the detections provide a classification for each box (e.g., car, pedestrian, bicycle), we can leverage this information during the association stage. For example, we can prevent a track that has consistently been classified as a car from being associated with a detection classified as a pedestrian. This helps avoid harmful mis-associations, which could lead to track loss in some scenarios.&lt;/p&gt;
+&lt;p&gt;After implementing these changes, here is how the tracker performs:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Class&lt;/th&gt;
+          &lt;th&gt;HOTA&lt;/th&gt;
+          &lt;th&gt;AssA&lt;/th&gt;
+          &lt;th&gt;DetA&lt;/th&gt;
+          &lt;th&gt;LocA&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Car&lt;/td&gt;
+          &lt;td&gt;57.85&lt;/td&gt;
+          &lt;td&gt;59.99&lt;/td&gt;
+          &lt;td&gt;56.10&lt;/td&gt;
+          &lt;td&gt;82.46&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Pedestrian&lt;/td&gt;
+          &lt;td&gt;33.47&lt;/td&gt;
+          &lt;td&gt;36.76&lt;/td&gt;
+          &lt;td&gt;30.70&lt;/td&gt;
+          &lt;td&gt;77.43&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;As seen, these changes significantly improve performance for car objects. As expected, a better association stage enhances association, detection, and localization accuracy, which results in a higher HOTA score. On the other hand, pedestrian objects show only minimal improvement. Pedestrian tracking remains particularly challenging, as evident from the KITTI ranking, where even state-of-the-art trackers struggle with pedestrians. In fact, there are datasets like MOTChallenge that focus entirely on tracking pedestrians in crowded environments, and specialized trackers, such as &lt;a href=&#34;https://arxiv.org/abs/2110.06864&#34;&gt;ByteTrack&lt;/a&gt;, have been developed for these scenarios.&lt;/p&gt;
+&lt;h1 id=&#34;conclusions-and-next-steps&#34;&gt;Conclusions and next steps&lt;/h1&gt;
+&lt;p&gt;In this post, we presented the main concepts of an object tracking application. A SORT-based algorithm was implemented, and it performs decently on the KITTI benchmark dataset. After a couple of modifications to the association stage—prioritizing primary over tentative tracks and leveraging object classification during association—the performance on car objects improved significantly, achieving a final HOTA score of 57.8 for this class.&lt;/p&gt;
+&lt;p&gt;There is still much room for improvement. For example, consider the following sequence:&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;//localhost:1313/posts/images/0006_output_video.gif&#34; alt=&#34;KF example GIF&#34;&gt;&lt;/p&gt;
+&lt;p&gt;As shown, the tracker handles cars entering the scene reasonably well. However, a closer look reveals two specific problems:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Missing track for the big truck&lt;/strong&gt;: The object detector fails to identify the truck, which means no track is created for it. A natural next step would be to explore alternative object detection algorithms. Object detection is a critical and open area of research. In fact, KITTI also offers an &lt;a href=&#34;https://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=2d&#34;&gt;object detection challenge&lt;/a&gt; to benchmark such algorithms.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Occlusion of the yellow car&lt;/strong&gt;: Towards the end of the sequence, a yellow car is trying to enter the highway. It gets occluded by other vehicles. We see that a track with ID 21 is created, but it is dropped due to occlusion, and another track with ID 23 is created a few frames later. As stated before, occlusion remains a critical issue in camera-based object tracking. Many SOTA algorithms address this problem using various approaches. For example, &lt;a href=&#34;https://arxiv.org/abs/2203.14360&#34;&gt;Observation-Centric SORT&lt;/a&gt; is an extension of SORT that specifically tackles occlusion. Exploring such solutions could be a valuable next step.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+</content>
+    </item>
+    
+  </channel>
+</rss>
