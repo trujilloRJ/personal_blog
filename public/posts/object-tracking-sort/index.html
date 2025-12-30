@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  
+    <title>Camera-based object tracking: An implementation of SORT algorithm :: JT Blog</title>
+  
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="This post explores camera-based object tracking through the implementation of the Simple Online and Realtime Tracker (SORT) algorithm. It covers key concepts and foundational elements essential for object tracking applications, demonstrating them with a SORT implementation for automotive tracking using the KITTI dataset. While SORT is computationally efficient and relatively simple, it delivers solid performance in the KITTI object tracking challenge." />
+<meta name="keywords" content="kalman filters, object tracking, numpy" />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="//localhost:1313/posts/object-tracking-sort/" />
+
+
+
+
+<link rel="stylesheet" href="//localhost:1313/assets/style.css">
+
+  <link rel="stylesheet" href="//localhost:1313/assets/green.css">
+
+
+
+
+
+
+<link rel="apple-touch-icon" href="//localhost:1313/img/apple-touch-icon-192x192.png">
+
+  <link rel="shortcut icon" href="//localhost:1313/img/favicon/green.png">
+
+
+
+<meta name="twitter:card" content="summary" />
+
+  
+    <meta name="twitter:site" content="" />
+  
+    <meta name="twitter:creator" content="" />
+
+
+
+<meta property="og:locale" content="en" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Camera-based object tracking: An implementation of SORT algorithm">
+<meta property="og:description" content="This post explores camera-based object tracking through the implementation of the Simple Online and Realtime Tracker (SORT) algorithm. It covers key concepts and foundational elements essential for object tracking applications, demonstrating them with a SORT implementation for automotive tracking using the KITTI dataset. While SORT is computationally efficient and relatively simple, it delivers solid performance in the KITTI object tracking challenge." />
+<meta property="og:url" content="//localhost:1313/posts/object-tracking-sort/" />
+<meta property="og:site_name" content="JT Blog" />
+
+  <meta property="og:image" content="//localhost:1313/">
+
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1024">
+
+
+  <meta property="article:published_time" content="2025-02-28 15:06:40 &#43;0200 &#43;0200" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"
+    onload="renderMathInElement(document.body);"></script>
+
+</head>
+<body class="green">
+
+
+<div class="container center headings--one-size">
+
+  <head>
+    
+    
+    
+</head>
+<header class="header">
+    <div class="header__inner">
+        <div class="header__logo">
+        <a href="/">
+  <div class="logo">
+    JT Blog
+  </div>
+</a>
+
+        </div>
+        
+    </div>
+    
+</header>
+  
+
+  <div class="content">
+    
+<div class="post">
+  <h1 class="post-title">
+    <a href="//localhost:1313/posts/object-tracking-sort/">Camera-based object tracking: An implementation of SORT algorithm</a></h1>
+  <div class="post-meta">
+    
+      <span class="post-date">
+        2025-02-28
+        
+      </span>
+    
+    
+      <span class="post-author">:: Javier Trujillo Rodriguez</span>
+    
+    
+  </div>
+
+  
+  <span class="post-tags">
+    
+    #<a href="//localhost:1313/tags/computer-vision/">computer-vision</a>&nbsp;
+    
+    #<a href="//localhost:1313/tags/kalman-filters/">kalman-filters</a>&nbsp;
+    
+    #<a href="//localhost:1313/tags/tracking/">tracking</a>&nbsp;
+    
+    #<a href="//localhost:1313/tags/opencv/">opencv</a>&nbsp;
+    
+  </span>
+  
+  
+
+
+  
+
+  <div class="post-content"><div>
+        
+
+<image src="/posts/images/introduction_sample.PNG" alt="Example lane" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The image above depicts a typical automotive scene captured by a monocular camera at a specific time. The colored boxes represent object detections made by a CNN-based detector, such as <a href="https://yolov8.com/#what-is">YOLO</a>, with each color indicating a different class—green for cars and dark blue for pedestrians. However, these detections are independent across frames since the object detector lacks memory, meaning it does not recognize that an object in one frame is the same in the next.</p>
+<p>In automotive applications, detecting objects in isolation is not sufficient. To enable functions like collision avoidance, path planning, and autonomous navigation, it is crucial to consistently identify and track objects as they move through consecutive frames. This process, known as object tracking, assigns a unique identity to each detected object, ensuring continuity and a more comprehensive understanding of the dynamic environment.</p>
+<p>In this post, we will explore key concepts of object tracking and present its flow diagram to illustrate the process. Additionally, we will implement a simple yet effective object tracker, widely recognized in the community as the Simple Online and Realtime Tracker <a href="https://arxiv.org/abs/1602.00763">(SORT)</a>, demonstrating its practical applications to the KITTI object tracking dataset.</p>
+<h2 id="source-code">Source code<a href="#source-code" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>The source code for the object tracker is available at: <a href="https://github.com/trujilloRJ/sort_based_object_tracking">https://github.com/trujilloRJ/sort_based_object_tracking</a></p>
+<h2 id="table-of-contents">Table of Contents<a href="#table-of-contents" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<ol>
+<li><a href="/posts/object-tracking-sort/#system-overview">System overview</a></li>
+<li><a href="/posts/object-tracking-sort/#state-space-model">State-space model</a></li>
+<li><a href="/posts/object-tracking-sort/#association-stage">Association stage</a></li>
+<li><a href="/posts/object-tracking-sort/#after-association">After association</a></li>
+<li><a href="/posts/object-tracking-sort/#results">Results</a></li>
+<li><a href="/posts/object-tracking-sort/#conclusions-and-next-steps">Conclusions and next steps</a></li>
+</ol>
+<h1 id="system-overview">System overview<a href="#system-overview" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>Let&rsquo;s begin with an overview of the core steps involved in any tracking system. Later sections will delve deeper into each stage and how SORT specifically implements them.</p>
+<p>The following figure illustrates the key stages of a tracking system, which operates on a frame-by-frame basis. Initially, no tracks exist; only detections from the current frame are available. These detections may correspond to real objects or false positives. To account for this uncertainty, the system creates &ldquo;tentative&rdquo; tracks for all detections. Over subsequent frames, these tentative tracks are either promoted to established tracks or discarded based on their consistency in being associated with new detections.</p>
+<p>
+
+<image src="/posts/images/SORT_diagram.png" alt="Tracking diagram" position="center" style="border-radius: 8px; width: 1200px;" >
+
+
+Core tracking system diagram.</p>
+<p>This method operates under the assumption that false positives are unlikely to persist across multiple frames. However, this introduces a fundamental trade-off: delaying the promotion or removal of tentative tracks enhances precision but slows down track establishment. In automotive applications, this delay can be critical, as rapid responsiveness is essential for safety and performance.</p>
+<ol>
+<li>
+<p><strong>Predict tracks next state</strong>: Once tracks are created and new frame detections become available, the first step is to predict the positions of the existing tracks. This requires assuming a motion model for the objects and using it to estimate their future positions over time. Typically, a track&rsquo;s state—comprising its position, kinematics and size—is represented within a Kalman Filter (KF) framework. The KF propagates the estimated states and their covariance, capturing the uncertainty in the prediction.</p>
+</li>
+<li>
+<p><strong>Detections-to-tracks association</strong>: At this stage, we have a predicted location for each tracked object and a set of detections from the object detector for the current frame. The next step is to associate these detections with the existing tracks to update their state. The association process is based on the likelihood of a match, typically determined by the spatial proximity between a detection and a predicted track location.</p>
+</li>
+<li>
+<p><strong>Update matched track states</strong>: Once detections have been assigned to tracks, the next step is to update the state of each matched track using the corresponding detection. This follows the standard KF framework, where the detected position serves as new information to refine our estimates of the track’s state, including its position, kinematics and size.</p>
+</li>
+<li>
+<p><strong>Initialize new tracks from unmatched detections</strong>: Any detection that was not assigned to an existing track is used to create a new &ldquo;tentative&rdquo; track. As previously mentioned, these tentative tracks will either be promoted or removed after a few frames based on their consistency.</p>
+</li>
+<li>
+<p><strong>Track management</strong>: The final step involves maintaining the set of active tracks. This includes removing tracks that have exited the scene or remained unmatched for an extended period, promoting tentative and performing other optional refinements to enhance tracking stability.</p>
+</li>
+</ol>
+<h1 id="state-space-model">State-space model<a href="#state-space-model" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>Each track represents an object modeled as a 2D box and parametrized by the following state:</p>
+$$\bold{x_k}=[x, y, w, h, v_x, v_y, \dot{w}, \dot{h}]^T$$<p>Where the subscript \(k\) represents the time index and:</p>
+<ul>
+<li>\(x\) and \(y\) denote the coordinates of the box center, given in pixels, with (0, 0) at the bottom-left corner of the image,</li>
+<li>\(w\) and \(h\) represent the width and height of the box in pixels, respectively,</li>
+<li>\(v_x\) and \(v_y\) capture the velocities of the box center,</li>
+<li>and \(\dot{w}\) and \(\dot{h}\) describe the rate of change of the box&rsquo;s width and height, respectively.</li>
+</ul>
+<p>Obviously, the real-world width and height of an object remain constant, but here we represent size in image coordinates, which do change as the object moves closer to or further from the camera. For this reason, we include the rate of change in size as part of the state to capture this effect.</p>
+<p>It’s worth noting that the original SORT implementation uses a different state representation for object size. Instead of width and height, it models size using scale (area) and aspect ratio, assuming the aspect ratio remains constant. However, this assumption doesn’t hold in all scenarios—consider a car turning at an intersection. As it transitions from moving longitudinally to laterally relative to the camera, the aspect ratio of its bounding box can change significantly. To address this limitation, I opted for a different representation of box size, using explicit width and height instead.</p>
+<h2 id="motion-model">Motion model<a href="#motion-model" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>A simple constant velocity (CV) motion model is assumed. This model is a linear function of the state and is defined with the following transition matrix \(\bold{F}\)</p>
+
+
+$$
+\bold{F}=
+\begin{bmatrix}
+1 & 0 & 0 & 0 & \Delta T & 0 & 0 & 0
+\\\
+0 & 1 & 0 & 0 & 0 & \Delta T & 0 & 0
+\\\
+0 & 0 & 1 & 0 & 0 & 0 & \Delta T & 0
+\\\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & \Delta T
+\\\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0
+\\\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0
+\\\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0
+\\\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 1
+\end{bmatrix}
+$$
+
+
+<p>Such that, we can predict the next state as:</p>
+$$\bold{\hat{x}_{k+1}}=\bold{F}\bold{x_k}$$<p>This motion model isn’t entirely realistic, as it can’t capture all the maneuvers automotive objects might perform—such as acceleration or turning. Additionally, due to the motion of the host vehicle, even stationary objects can exhibit non-CV motion in the image frame. One alternative is to use more expressive models, like Constant Turn Rate (CTR) or Constant Acceleration (CA). While this is an interesting direction, we’ll stick with the simpler CV model in this post to maintain coherence with the original SORT design. For a deeper dive into motion models, check out this post: <a href="https://blogjtr.com/posts/ekf-vs-ukf/">EKF vs. UKF</a>.</p>
+<p>Another approach to mitigate the impact of an imperfect motion modelling is to inject noise to the prediciton. This is a common practice in almost all KF designs and it&rsquo;s referred to as process noise or plant noise, depending on the field.</p>
+<p>But how should we model this noise, and how much should we add? That largely depends on the specific application and how confident we are in the chosen motion model. Ultimately, the process noise is a design parameter that deserves its own blog post. For our application, we model the process noise as additive white Gaussian noise with no correlation between its components. This type of noise is defined as:</p>
+$$\bold{\bold{\nu}}=\mathcal{N}(\bold{0}, \bold{Q})$$<p>Where \(\bold{Q}\) is a diagonal matrix representing the noise covariance:</p>
+$$\bold{Q} = diag([4, ..., 4])$$<p>With the motion model defined, both the track state and track covariance can be predicted as:</p>
+<ol>
+<li>State propagation: $$\bold{\hat{x}_{k+1}}=\bold{F}\bold{x_k}$$</li>
+<li>Covariance propagation: $$\bold{\hat{P}_{k+1}} = \bold{F}\bold{P_k}\bold{F} + \bold{Q}$$</li>
+</ol>
+<h1 id="association-stage">Association stage<a href="#association-stage" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>Now that we’ve predicted where our tracks are likely to be in the current frame, the next step is to incorporate new information from the detections proposed by the object detector. The goal of the association stage is to link these new detections to existing tracks.</p>
+<p>To do this, we need some form of <em>association score</em>—a metric that reflects the likelihood that a given detection corresponds to a tracked object. Ideally, this score should be high when a detection and a track are (i) spatially close and (ii) have similar sizes.</p>
+<p>We can encode both of these conditions using the Intersection over Union (IoU) metric. This metric is widely used in the computer vision and perception communities and is the one adopted in the original SORT paper. While many readers are likely already familiar with IoU, for the sake of completeness, I’ll illustrate it in the following figure:</p>
+<p>
+
+<image src="/posts/images/iou_definition.png" alt="iou_definition" position="center" style="border-radius: 8px; width: 400px;" >
+
+
+Illustration of Intersection over Union (IoU).</p>
+<p>As the first step in the association stage, we compute the IoU between all possible combinations of tracks and detections. This results in an association matrix, where each entry represents the IoU score for a given combination, and is used to assign detections to tracks. Naturally, combinations with an IoU of 0 represent very unlikely associations, while those with an IoU of 1 are highly likely.</p>
+<p>A naive, greedy approach might be to simply assign each track the detection with the highest IoU, assuming it&rsquo;s the most likely association. However, this method may not always be optimal. Consider the following example:</p>
+<p>
+
+<image src="/posts/images/hungarian.png" alt="hungarian assignment" position="center" style="border-radius: 8px; width: 600px;" >
+
+
+Example of assignment conflict.</p>
+<p>In this scenario, the blue boxes represent tracks A and B, while the red boxes represent detections 1 and 2. Following the greedy assignment approach, detection 2 will be matched to track A, while track B and detection 1 will be left unmatched. As a result, track B won&rsquo;t be updated in this frame, which could lead to a track loss in subsequent frames. Furthermore, detection 1, being unmatched, will be used to create a new track.</p>
+<p>A better assignment strategy would be to match track A with detection 1 and track B with detection 2. This way, both tracks are updated, and no new track is created. In fact, this approach also makes more sense when we aim to maximize the global score rather than the local one. The global score for this assignment is 0.2 + 0.2 = 0.4, compared to 0.3 with the greedy approach.</p>
+<p>In other words, it&rsquo;s better to perform the assignment in a global manner. To achieve this, the authors of SORT proposed using <a href="https://en.wikipedia.org/wiki/Hungarian_algorithm">Hungarian method</a>, a combinatorial optimization algorithm that solves the assignment problem by maximizing the global score. In Python, <code>scipy</code> package implements the Hungarian algorithm with the function <a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linear_sum_assignment.html"><code>scipy.optimize.linear_sum_assignment</code></a>.</p>
+<h4 id="a-note-about-advanced-association-algorithms">A note about advanced association algorithms<a href="#a-note-about-advanced-association-algorithms" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Association is the most critical stage in the object tracking cycle and it remains an open research topic.  In particular, there are numerous proposals for association scores, and the latest state-of-the-art (SOTA) object tracking algorithms rely on advanced association metrics. Many contributions have explored using Deep Learning to extract relevant features from each detection and encode them into more sophisticated association scores.</p>
+<p>The <a href="https://arxiv.org/abs/1703.07402">Deep SORT</a> paper is an extension of the SORT algorithm using that incorporates a deep association metric, significantly improving performance across nearly all benchmark datasets.</p>
+<h1 id="after-association">After association<a href="#after-association" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>At this stage in the tracking cycle, we have:</p>
+<ol>
+<li><strong>Unmatched tracks</strong>: Tracks that were not associated with any detection and will not be updated.</li>
+<li><strong>Unmatched detections</strong>: Detections that were not associated with any track. We will create new tentative tracks from them.</li>
+<li><strong>Matched tracks</strong>: Tracks that were associated with a detection and will be updated according to the KF framework.</li>
+</ol>
+<h4 id="track-udpate">Track udpate<a href="#track-udpate" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Assuming the reader is familiar with the Kalman filter, I will briefly cover the update stage, more details can be found in <a href="https://blogjtr.com/posts/ekf-vs-ukf/">EKF vs. UKF</a>. The associated detection box (also called measurement) provides information about box center and size:</p>
+$$\bold{z_k}=[z_x, z_y, z_w, z_h]$$<p>The track state contains also velocities, so we need a <em>measurement function</em> \(\bold{H}\)  that maps between state space and measurement space. This allows us to predict the measurement based on our track state \(\bold{\hat{z}_k}\):</p>
+
+
+$$\bold{\hat{z}_k}=\bold{H}\bold{\hat{x}_{k+1}}$$
+
+
+
+
+$$
+\bold{H}=
+\begin{bmatrix}
+1 & 0 & 0 & 0 & 0 & 0 & 0 & 0
+\\\
+0 & 1 & 0 & 0 & 0 & 0 & 0 & 0
+\\\
+0 & 0 & 1 & 0 & 0 & 0 & 0 & 0
+\\\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0
+\end{bmatrix}
+$$
+
+
+<p>The difference between predicted and real measurement is called innovation</p>
+$$\bold{y_k}=\bold{z_{k+1}} - \bold{\hat{z}_{k+1}}$$<p>and it is used to update the track state, weighted by the Kalman gain \(\bold{K_k}\). In simple terms, the Kalman gain is computed based on the estimated covariances for the state \(\bold{\hat{P}_{k+1}}\) and measurement noise coaviance \(\bold{R}\). The complete update step is described as:</p>
+$$ \bold{y_k}=\bold{z_{k+1}} - \bold{H}\bold{\hat{x}_{k+1}} $$$$ \bold{K_k} = \bold{\hat{P}_{k+1}}\bold{H^T_k}(\bold{H_k}\bold{\hat{P}\_{k+1}}\bold{H^T_k} + \bold{R})^{-1} $$$$ \bold{x_{k+1}} = \bold{\hat{x}\_{k+1}} + \bold{K_k}\bold{y_k}   $$$$ \bold{P_{k+1}} = (\bold{I_{n_x}} - \bold{K_k}\bold{H_k})\bold{\hat{P}\_{k+1}} $$<p>The measurement covariance matrix \(\bold{R}\) models the estimated error for the detection boxes, accounting for both center and size in pixel units. In other applications, the filter designer might make an informed guess about these errors based on sensor characteristics, such as radar range and azimuth resolution. However, in this camera-based application, the measurements are derived from an object detector neural network, and it&rsquo;s difficult to characterize them without extensive statistical analysis.</p>
+<p>Ultimately, just like the process noise \(\bold{Q}\), the measurement covariance is also a design parameter. For this application, we set it as:</p>
+$$\bold{R} = diag\([1, 1, 4, 4]\)$$<h4 id="track-management">Track management<a href="#track-management" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Finally, in this last stage, we manage the current track list. Some of the tasks involved include:</p>
+<ul>
+<li>Promoting tentative tracks to primary tracks.</li>
+<li>Deleting tracks that have remained unmatched for a number of consecutive cycles.</li>
+<li>Removing tracks that are exiting the camera&rsquo;s field of view.</li>
+</ul>
+<h1 id="results">Results<a href="#results" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>For a quick example, the following .gif illustrates our tracking system working in an urban scenario. Each track is represented by a box with a unique color, and is identified by a number in the top-left corner of the box.</p>
+<p><img src="/posts/images/0013_output_video.gif" alt="Ego turning"></p>
+<p>t is evident that the tracker successfully detects all the objects in the scene, including in-lane vehicles, parked cars, and oncoming cars in the adjacent lane. However, upon closer inspection, there are some false tracks, mostly due to false detections. Towards the end of the sequence, we can see how the track for the parked car (ID 714) is maintained during an occlusion phase, with an oncoming track (ID 692) temporarily covering it. However, this does not happen with other parked cars. Occlusion remains one of the main challenges in camera-based object tracking, and more on that will be discussed in the conclusions.</p>
+<h4 id="metrics">Metrics<a href="#metrics" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Beyond visual inpsection, we need to evaluate our tracker comprehensively. For this, we use the <a href="https://www.cvlibs.net/datasets/kitti/eval_tracking.php">KITTI object tracking dataset</a> which is an established benchmark in the automotive and vision communities.</p>
+<p>There are a daunting number of KPI and evaluation metrics for object tracking. Since it&rsquo;s challenging to assess such a complex task with a single value, multiple metrics are typically employed to determine the overall performance of a tracking system and provide insights into its strengths and weaknesses. The most widely adopted metric is the <a href="https://arxiv.org/abs/2009.07736">Higher Order Tracking Accuracy (HOTA)</a>. If you check the <a href="https://www.cvlibs.net/datasets/kitti/eval_tracking.php">object tracking ranking</a> on the KITTI website you&rsquo;ll notice that algorithms are ranked based on their HOTA score.</p>
+<p>Following these guidelines, we’ve selected four key metrics to characterize our object tracking system:</p>
+<ul>
+<li>HOTA: Combines aspects of localization, association, and detection in one single score.</li>
+<li>AssA (Association Accuracy): Assesses how well the detected objects are matched across different frames.</li>
+<li>DetA (Detection Accuracy): Evaluates how well the objects are detected within the frames.</li>
+<li>LocA (Localization Accuracy): Measures the accuracy of the localized position of detected objects.</li>
+</ul>
+<p>All of these metrics offer values between 0 and 100, with higher values indicating better performance. To compute the metrics, we use the <a href="https://github.com/JonathonLuiten/TrackEval">object tracking evaluation kit</a>, which integrates all the tracking metrics and supports benchmarks like KITTI and <a href="https://motchallenge.net/">MOTChallenge</a>.</p>
+<p>The following table shows the evaluation for our tracking system:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Class</th>
+          <th>HOTA</th>
+          <th>AssA</th>
+          <th>DetA</th>
+          <th>LocA</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Car</td>
+          <td>46.61</td>
+          <td>49.33</td>
+          <td>44.81</td>
+          <td>79.54</td>
+      </tr>
+      <tr>
+          <td>Pedestrian</td>
+          <td>33.17</td>
+          <td>29.81</td>
+          <td>37.24</td>
+          <td>76.43</td>
+      </tr>
+  </tbody>
+</table>
+<p>Without any reference, it’s difficult to extract meaningful insights from these results. For example, SOTA object tracking algorithms like <a href="https://arxiv.org/abs/2409.16149">MCTrack</a> and <a href="https://arxiv.org/abs/2501.01275">HybridTrack</a> achieve impressive HOTA scores above 80 for cars in the KITTI dataset. In the same ranking, the original SORT algorithm achieves a car HOTA score of 43, which aligns with our results.</p>
+<p>While current SOTA object tracking algorithms achieve significantly better performance compared to SORT, they come with much higher computational costs and all require a pre-training stage. This is because they rely on Deep Learning to enhance the association stage, necessitating training. In contrast, SORT has the clear advantage of being fast, lightweight, and relatively easy to implement and debug, while still achieving decent performance.</p>
+<h4 id="improvements-priority-and-class-based-association">Improvements: Priority and class-based association<a href="#improvements-priority-and-class-based-association" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>After the first evaluation, we inspect scenarios where our tracking system performs poorly. One recurrent issue is a conflict in the association between tentative and primary tracks. The problem, as illustrated in the following figure, can be explained as follows:</p>
+<p>
+
+<image src="/posts/images/example_association.png" alt="example association" position="center" style="border-radius: 8px; width: 400px;" >
+
+
+Example of false detection.</p>
+<p>In some frames, an additional false detection occurs around an object, as indicated by the green box in the figure. This results in the creation of a new tentative track from this false detection. In the next frame, only the two detections from the cars are present, but there are three tracks: the two primary ones (ID 11 and ID 81) and the newly created tentative track. This can lead to a conflict in the association assignment, potentially causing track degradation and, eventually, track loss.</p>
+<p>One solution to this problem is to penalize tentative tracks during the association process. In other words, we can prioritize association with primary tracks over tentative ones. This can be easily implemented by first associating primary tracks and then associating tentative tracks. This approach ensures that no tentative tracks claim detections that could otherwise be associated with primary tracks.</p>
+<p>Additionally, we introduced a class-based association. Since the detections provide a classification for each box (e.g., car, pedestrian, bicycle), we can leverage this information during the association stage. For example, we can prevent a track that has consistently been classified as a car from being associated with a detection classified as a pedestrian. This helps avoid harmful mis-associations, which could lead to track loss in some scenarios.</p>
+<p>After implementing these changes, here is how the tracker performs:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Class</th>
+          <th>HOTA</th>
+          <th>AssA</th>
+          <th>DetA</th>
+          <th>LocA</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Car</td>
+          <td>57.85</td>
+          <td>59.99</td>
+          <td>56.10</td>
+          <td>82.46</td>
+      </tr>
+      <tr>
+          <td>Pedestrian</td>
+          <td>33.47</td>
+          <td>36.76</td>
+          <td>30.70</td>
+          <td>77.43</td>
+      </tr>
+  </tbody>
+</table>
+<p>As seen, these changes significantly improve performance for car objects. As expected, a better association stage enhances association, detection, and localization accuracy, which results in a higher HOTA score. On the other hand, pedestrian objects show only minimal improvement. Pedestrian tracking remains particularly challenging, as evident from the KITTI ranking, where even state-of-the-art trackers struggle with pedestrians. In fact, there are datasets like MOTChallenge that focus entirely on tracking pedestrians in crowded environments, and specialized trackers, such as <a href="https://arxiv.org/abs/2110.06864">ByteTrack</a>, have been developed for these scenarios.</p>
+<h1 id="conclusions-and-next-steps">Conclusions and next steps<a href="#conclusions-and-next-steps" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>In this post, we presented the main concepts of an object tracking application. A SORT-based algorithm was implemented, and it performs decently on the KITTI benchmark dataset. After a couple of modifications to the association stage—prioritizing primary over tentative tracks and leveraging object classification during association—the performance on car objects improved significantly, achieving a final HOTA score of 57.8 for this class.</p>
+<p>There is still much room for improvement. For example, consider the following sequence:</p>
+<p><img src="/posts/images/0006_output_video.gif" alt="KF example GIF"></p>
+<p>As shown, the tracker handles cars entering the scene reasonably well. However, a closer look reveals two specific problems:</p>
+<ul>
+<li>
+<p><strong>Missing track for the big truck</strong>: The object detector fails to identify the truck, which means no track is created for it. A natural next step would be to explore alternative object detection algorithms. Object detection is a critical and open area of research. In fact, KITTI also offers an <a href="https://www.cvlibs.net/datasets/kitti/eval_object.php?obj_benchmark=2d">object detection challenge</a> to benchmark such algorithms.</p>
+</li>
+<li>
+<p><strong>Occlusion of the yellow car</strong>: Towards the end of the sequence, a yellow car is trying to enter the highway. It gets occluded by other vehicles. We see that a track with ID 21 is created, but it is dropped due to occlusion, and another track with ID 23 is created a few frames later. As stated before, occlusion remains a critical issue in camera-based object tracking. Many SOTA algorithms address this problem using various approaches. For example, <a href="https://arxiv.org/abs/2203.14360">Observation-Centric SORT</a> is an extension of SORT that specifically tackles occlusion. Exploring such solutions could be a valuable next step.</p>
+</li>
+</ul>
+
+      </div></div>
+
+  
+  
+<div class="pagination">
+    <div class="pagination__title">
+        <span class="pagination__title-h"></span>
+        <hr />
+    </div>
+    <div class="pagination__buttons">
+        
+        <span class="button previous">
+            <a href="//localhost:1313/posts/road-detection/">
+                <span class="button__icon">←</span>
+                <span class="button__text">Road segmentation with U-Net from monocular camera</span>
+            </a>
+        </span>
+        
+        
+        <span class="button next">
+            <a href="//localhost:1313/posts/ekf-vs-ukf/">
+                <span class="button__text">EKF vs. UKF performance and robustness comparison for nonlinear state estimation</span>
+                <span class="button__icon">→</span>
+            </a>
+        </span>
+        
+    </div>
+</div>
+
+  
+
+  
+  
+
+  
+</div>
+
+  </div>
+
+  
+    <footer class="footer">
+  <div class="footer__inner">
+    
+      <div class="copyright">
+        <span>© 2025 Powered by <a href="http://gohugo.io">Hugo</a></span>
+    
+        
+      </div>
+  </div>
+</footer>
+
+<script src="//localhost:1313/assets/main.js"></script>
+<script src="//localhost:1313/assets/prism.js"></script>
+
+
+
+
+
+
+
+  
+</div>
+
+</body>
+</html>
