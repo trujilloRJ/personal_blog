@@ -6,7 +6,352 @@
     <description>Recent content in Deep-Learning on JT Blog</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sat, 10 May 2025 15:06:40 +0200</lastBuildDate><atom:link href="//localhost:1313/tags/deep-learning/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Tue, 30 Dec 2025 15:06:40 +0200</lastBuildDate><atom:link href="//localhost:1313/tags/deep-learning/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>From Prototype to Production: Optimizing YOLOv8 and SORT for Real-Time Automotive Perception</title>
+      <link>//localhost:1313/posts/optimizing-perception/</link>
+      <pubDate>Tue, 30 Dec 2025 15:06:40 +0200</pubDate>
+      
+      <guid>//localhost:1313/posts/optimizing-perception/</guid>
+      <description>&lt;p&gt;In a &lt;a href=&#34;https://blogjtr.com/posts/object-tracking-sort/&#34;&gt;previous blog&lt;/a&gt;, I explored the fundamentals of object tracking by implementing the &lt;strong&gt;SORT (Simple Online and Realtime Tracking)&lt;/strong&gt; algorithm using the KITTI dataset. The purpose at the time was developing and object tracker, so it relied on pre-computed reference detections provided by KITTI.&lt;/p&gt;
+&lt;p&gt;In this post, I have extended the pipeline into a full-stack perception engine: integrating a &lt;strong&gt;YOLOv8&lt;/strong&gt; object detector with the &lt;strong&gt;SORT&lt;/strong&gt; tracker and applying rigorous optimization techniques to achieve production-level performance.&lt;/p&gt;</description>
+      <content>&lt;p&gt;In a &lt;a href=&#34;https://blogjtr.com/posts/object-tracking-sort/&#34;&gt;previous blog&lt;/a&gt;, I explored the fundamentals of object tracking by implementing the &lt;strong&gt;SORT (Simple Online and Realtime Tracking)&lt;/strong&gt; algorithm using the KITTI dataset. The purpose at the time was developing and object tracker, so it relied on pre-computed reference detections provided by KITTI.&lt;/p&gt;
+&lt;p&gt;In this post, I have extended the pipeline into a full-stack perception engine: integrating a &lt;strong&gt;YOLOv8&lt;/strong&gt; object detector with the &lt;strong&gt;SORT&lt;/strong&gt; tracker and applying rigorous optimization techniques to achieve production-level performance.&lt;/p&gt;
+&lt;p&gt;The primary challenge in automotive AI is the trade-off between &lt;strong&gt;latency&lt;/strong&gt; (how fast the car &amp;ldquo;sees&amp;rdquo;) and &lt;strong&gt;precision&lt;/strong&gt; (how accurately it identifies a hazard). A high-accuracy model is useless if its inference time exceeds the vehicle&amp;rsquo;s reaction window.&lt;/p&gt;
+&lt;p&gt;This post documents the journey of taking a &amp;ldquo;research-grade&amp;rdquo; model and refining it into a high-throughput inference engine capable of running on modern NVIDIA hardware.&lt;/p&gt;
+&lt;h2 id=&#34;source-code&#34;&gt;Source code&lt;/h2&gt;
+&lt;p&gt;As usual, the source code is open and available at: &lt;a href=&#34;https://github.com/trujilloRJ/optimize_perception_pipeline&#34;&gt;GitHub Repo&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id=&#34;table-of-contents&#34;&gt;Table of Contents&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/optimizing-perception/#pipeline-setup&#34;&gt;Pipeline setup&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/optimizing-perception/#quantization&#34;&gt;Quantization&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/optimizing-perception/#tensorrt-compilation&#34;&gt;TensorRT compilation&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&#34;//localhost:1313/posts/optimizing-perception/#results-and-discussion&#34;&gt;Results and discussion&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h1 id=&#34;pipeline-setup&#34;&gt;Pipeline setup&lt;/h1&gt;
+&lt;p&gt;&lt;a href=&#34;https://ultralytics.com/&#34;&gt;Ultralytics&lt;/a&gt; provides a powerful and easy-to-use implementation of different YOLO models. They integrate seamlessly with Pytorch by wrapping the model in a high-level API. This is excellent for rapid prototyping, the wrapper handles image padding, normalization, and Non-Maximum Suppression (NMS) internally. It also provides a simple interface to export the model to ONNX or TensorRT. In a few lines of code, you can load a pre-trained YOLOv8 model and run inference:&lt;/p&gt;
+
+
+
+  &lt;div class=&#34;collapsable-code&#34;&gt;
+    &lt;input id=&#34;946872513&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;946872513&#34;&gt;
+      &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__title&#34;&gt;Ultralytics YOLOv8 Inference&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
+    &lt;/label&gt;
+    &lt;pre class=&#34;language-Python&#34; &gt;&lt;code&gt;
+from ultralytics import YOLO
+model = YOLO(&amp;#39;yolov8n.pt&amp;#39;)  # Load a pre-trained YOLOv8 model
+results = model.predict(source=&amp;#39;image.jpg&amp;#39;)  # Run inference on an image
+&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+
+
+&lt;p&gt;However, the purpose of this project is to learn how to optimize the model for production use, and the intend is that this process might be translated to other models or frameworks. Therefore, I decided to extract the raw Pytorch model from the Ultralytics wrapper and implement the necessary pre-processing and post-processing steps manually.&lt;/p&gt;
+&lt;p&gt;This involves:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Preprocessing:&lt;/strong&gt; Implementing letterbox padding and pixel normalization to ensure the input tensor matches the training distribution.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Post-processing:&lt;/strong&gt; Implementing a custom &lt;strong&gt;NMS (Non-Maximum Suppression)&lt;/strong&gt; layer to filter overlapping bounding boxes.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The following snippet shows a compressed version of the pipeline setup (only for object detection):&lt;/p&gt;
+
+
+
+  &lt;div class=&#34;collapsable-code&#34;&gt;
+    &lt;input id=&#34;452987631&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;452987631&#34;&gt;
+      &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__title&#34;&gt;Object detection pipeline&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
+    &lt;/label&gt;
+    &lt;pre class=&#34;language-Python&#34; &gt;&lt;code&gt;
+import torch
+import torch.nn.functional as F
+import cv2
+from ultralytics import YOLO
+from torchvision.ops import nms
+
+device = torch.device(&amp;#34;cuda&amp;#34; if torch.cuda.is_available() else &amp;#34;cpu&amp;#34;)
+
+model = YOLO(&amp;#39;yolov8m.pt&amp;#39;, verbose=False).model.to(device)
+
+# PRE-PROCESSING
+img_bgr = cv2.imread(img_path)
+img = torch.from_numpy(img_bgr).to(device).permute(2, 0, 1).unsqueeze(0) # HWC to CHW
+h, w = img.shape[2], img.shape[3]  # 375, 1242
+pad_h, pad_w = (32 - h % 32) % 32, (32 - w % 32) % 32  
+img = F.pad(img, (0, pad_w, 0, pad_h), value=0).float() / 255.0  # normalize to [0, 1]
+img = img.contiguous()
+
+results = model(img)
+
+# POST-PROCESSING
+conf_thres, iou_thres = 0.25, 0.45
+prediction = results[0].squeeze().transpose(0, 1) # (1, 84, 9828) -&amp;gt; (9828, 84) for easier indexing
+boxes = prediction[:, :4]  # [xc, yc, w, h]
+scores = prediction[:, 4:] # [class_scores]
+max_scores, class_ids = torch.max(scores, dim=1)
+mask = max_scores &amp;gt; conf_thres
+boxes, max_scores, class_ids = boxes[mask], max_scores[mask], class_ids[mask]
+# Convert [xc, yc, w, h] to [x1, y1, x2, y2]
+# (Standard NMS expects top-left and bottom-right corners)
+x1 = boxes[:, 0] - boxes[:, 2] / 2
+y1 = boxes[:, 1] - boxes[:, 3] / 2
+x2 = boxes[:, 0] &amp;#43; boxes[:, 2] / 2
+y2 = boxes[:, 1] &amp;#43; boxes[:, 3] / 2
+boxes = torch.stack([x1, y1, x2, y2], dim=1)
+# Apply Non-Maximum Suppression (NMS)
+# We use &amp;#34;Batched NMS&amp;#34; trick: offset boxes by class ID so classes don&amp;#39;t suppress each other
+offset = class_ids * 4096 
+indices = nms(boxes &amp;#43; offset.unsqueeze(1), max_scores, iou_thres)
+boxes, confidence, class_ids = boxes[indices], max_scores[indices], class_ids[indices]
+&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+
+
+&lt;p&gt;It is important to note that first thing we do in pre-processing is to send the image tensor to the GPU. This is to speed-up all the subsequent operations (since the model is in the GPU). Also, we make sure to call &lt;code&gt;.contiguous()&lt;/code&gt; after padding, this is to ensure that the tensor is stored in a contiguous block of memory, which is important for performance when passing it through the model and it is critical when using the compiled TensorRT engine later on.&lt;/p&gt;
+&lt;p&gt;A note about the output of YOLO, the output tensor has shape (1, 84, 9828) where 84 is the number of classes (80) + 4 (bounding box coordinates + objectness score) and 9828 is the number of predicted candidate anchor detection boxes. Each of these boxes has a set of class scores, and we take the maximum score and corresponding class ID for each box. Then, we filter out boxes with low confidence scores before applying NMS.&lt;/p&gt;
+&lt;p&gt;The output detection boxes are then send to the SORT tracker for object tracking. I will not cover the SORT implementation here as it is covered in great detail in &lt;a href=&#34;https://blogjtr.com/posts/object-tracking-sort/&#34;&gt;this previous blog post&lt;/a&gt;. The entire perception pipeline is represented in the following diagram:&lt;/p&gt;
+
+
+&lt;image src=&#34;//localhost:1313/posts/images/fps_example_perception_pipeline.png&#34; alt=&#34;Example perception pipeline&#34; position=&#34;center&#34; style=&#34;border-radius: 8px; width: 800px&#34; &gt;
+
+
+&lt;p&gt;We put everything together in a single inference script that takes care of loading the model, reading the input video stream, running the detection + tracking pipeline, and visualizing the results. This script is also used to benchmark the different optimization steps described below.&lt;/p&gt;
+&lt;p&gt;The following gif show a sample output of the perception pipeline running on a video from the KITTI dataset:&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;//localhost:1313/posts/images/fps_example_tracking.gif&#34; alt=&#34;FPS Sample Output GIF&#34;&gt;&lt;/p&gt;
+&lt;p&gt;This implementation results in a tracking performance measured by the &lt;a href=&#34;https://autonomousvision.github.io/hota-metrics/&#34;&gt;HOTA metric&lt;/a&gt; of &lt;strong&gt;57&lt;/strong&gt; on the KITTI tracking dataset. On the other hand, the inference speed is around &lt;code&gt;52 FPS&lt;/code&gt; on an NVIDIA RTX 5050 GPU using the YOLOv8m model. The following table summarizes the time measured for each step in the pipeline:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Step&lt;/th&gt;
+          &lt;th&gt;Avg. Time (ms)&lt;/th&gt;
+          &lt;th&gt;Pct. of total (%)&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Pre-processing&lt;/td&gt;
+          &lt;td&gt;0.38&lt;/td&gt;
+          &lt;td&gt;1.95&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;YOLOv8 Inference&lt;/td&gt;
+          &lt;td&gt;15.56&lt;/td&gt;
+          &lt;td&gt;80.04&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;Post-processing&lt;/td&gt;
+          &lt;td&gt;1.11&lt;/td&gt;
+          &lt;td&gt;5.71&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;SORT Tracking&lt;/td&gt;
+          &lt;td&gt;2.19&lt;/td&gt;
+          &lt;td&gt;11.27&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;&lt;strong&gt;Total&lt;/strong&gt;&lt;/td&gt;
+          &lt;td&gt;&lt;strong&gt;19.44 (52 FPS)&lt;/strong&gt;&lt;/td&gt;
+          &lt;td&gt;&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;The YOLOv8 inference step is by far the most time-consuming part of the pipeline, accounting for around 80% of the total inference time. Therefore, optimizing this step will have the most significant impact on overall performance.&lt;/p&gt;
+&lt;p&gt;In the next sections, we will explore different optimization techniques to improve the inference speed while maintaining tracking performance. Let&amp;rsquo;s start with quantization.&lt;/p&gt;
+&lt;h1 id=&#34;quantization&#34;&gt;Quantization&lt;/h1&gt;
+&lt;p&gt;Our model weights are now stored in &lt;strong&gt;FP32 (32-bit Floating Point)&lt;/strong&gt; format. This is the standard single precision format used in scientific computing. Specifically, the FP32 format allocates 1 bit for the sign, 8 bits for the exponent, and 23 bits for the mantissa (significand). This means that FP32 can represent a wide range of values with high precision, the precision is defined by the 23 bits of the mantissa, which allows for approximately 7 decimal digits of accuracy.&lt;/p&gt;
+&lt;p&gt;The question ML practitioners often ask is: do we really need that much precision for inference? The answer is: usually not and it has been proven that DL models are quite resilient to reduced precision arithmetic. Therefore, the objective of quantization is to reduce the precision of the model weights to speed-up inference and reduce memory consumption, while maintaining acceptable accuracy, that is ensuring that the model&amp;rsquo;s performance does not degrade significantly.&lt;/p&gt;
+&lt;p&gt;In this project, I experimented with converting the model weights from FP32 to &lt;strong&gt;FP16 (Half Precision)&lt;/strong&gt; format. FP16 uses 1 bit for the sign, 5 bits for the exponent, and 10 bits for the mantissa. This means that FP16 can represent a smaller range of values with lower precision, approximately 3 decimal digits of accuracy. This is very easy to implement in Pytorch, in fact it is a one liner:&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;&#34;&gt;&lt;code class=&#34;language-python&#34; data-lang=&#34;python&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;model&lt;span style=&#34;color:#f92672&#34;&gt;.&lt;/span&gt;half()  &lt;span style=&#34;color:#75715e&#34;&gt;# Convert model to FP16&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;The benefits of using FP16 are twofold:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Reduced Memory Bandwidth:&lt;/strong&gt; Since FP16 uses half the number of bits compared to FP32, it effectively halves the memory footprint and bandwidth required to move weights into the GPU cores.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Increased Throughput:&lt;/strong&gt; Modern NVIDIA GPUs feature dedicated FP16 Tensor Cores that can perform FP16 matrix multiplications and convolutions at a much higher throughput compared to FP32 operations.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Ok, let&amp;rsquo;s see the results. After converting the model to FP16, I re-ran the inference script and measured the FPS and tracking performance. See the results below:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Model&lt;/th&gt;
+          &lt;th&gt;Avg. YOLO Time (ms)&lt;/th&gt;
+          &lt;th&gt;Total Time (ms)&lt;/th&gt;
+          &lt;th&gt;FPS&lt;/th&gt;
+          &lt;th&gt;HOTA Score&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;FP32&lt;/td&gt;
+          &lt;td&gt;15.56&lt;/td&gt;
+          &lt;td&gt;19.44&lt;/td&gt;
+          &lt;td&gt;52&lt;/td&gt;
+          &lt;td&gt;57&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;FP16&lt;/td&gt;
+          &lt;td&gt;10.35&lt;/td&gt;
+          &lt;td&gt;14.00&lt;/td&gt;
+          &lt;td&gt;71&lt;/td&gt;
+          &lt;td&gt;57&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;As we can see, it speeds up the YOLOv8 inference time from &lt;code&gt;15.56 ms&lt;/code&gt; to &lt;code&gt;10.35 ms&lt;/code&gt;, resulting in an overall pipeline speed of &lt;code&gt;71 FPS&lt;/code&gt;. The tracking performance remains unchanged at a HOTA score of &lt;code&gt;57&lt;/code&gt;, indicating that the model&amp;rsquo;s accuracy was preserved despite the reduced precision. Also, memory consumption was reduced by approximately 50%, allowing for larger batch sizes or more complex models to fit within the same GPU memory constraints. This is basically free lunch!&lt;/p&gt;
+&lt;p&gt;Can we go further? Yes, we can try to quantize the model to INT8 (8-bit Integer) format or FP8 format, the latter is not supported by older GPUs. However, this level of quantization requires a more complex workflow involving calibration with representative datasets to minimize accuracy loss. Calibration is needed because the range of values that can be represented in INT8 is much smaller than FP16 or FP32, so we need to find the optimal scaling factors to map the floating-point weights and activations to integer values. The idea is to run a calibration dataset through the model to collect statistics on the activations, and then use these statistics to determine the scaling factors.&lt;/p&gt;
+&lt;h1 id=&#34;tensorrt&#34;&gt;TensorRT&lt;/h1&gt;
+&lt;p&gt;The final and most significant leap in performance was achieved by compiling the model into a &lt;strong&gt;TensorRT engine&lt;/strong&gt;. &lt;a href=&#34;https://developer.nvidia.com/tensorrt&#34;&gt;TensorRT&lt;/a&gt; is an entire ecosystem developed by NVIDIA to optimize deep learning models for inference on NVIDIA GPUs. Among other features, TensorRT provides a compiler that takes a trained model (in ONNX format) and generates an optimized runtime engine tailored for specific NVIDIA hardware.&lt;/p&gt;
+&lt;h2 id=&#34;tensorrt-compilation&#34;&gt;TensorRT compilation&lt;/h2&gt;
+&lt;p&gt;The compilation workflow involves several steps like optimizing the model graph, cleaning up unused nodes, quanitzation and profile in real-time to select the best kernels for the target hardware. Maybe the most important optimization is &lt;strong&gt;layer fusion&lt;/strong&gt;, where multiple layers are combined into a single operation to reduce memory access and improve computational efficiency. For example, a common fusion is combining a convolution layer followed by a batch normalization layer into a single convolution operation with adjusted weights and biases.&lt;/p&gt;
+&lt;p&gt;To compile our Pytorch model to TensorRT, we first need to export it to ONNX (Open Neural Network Exchange) format. This can be done using the following code snippet:&lt;/p&gt;
+
+
+
+  &lt;div class=&#34;collapsable-code&#34;&gt;
+    &lt;input id=&#34;283561497&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;283561497&#34;&gt;
+      &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__title&#34;&gt;Export model to ONNX&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
+    &lt;/label&gt;
+    &lt;pre class=&#34;language-Python&#34; &gt;&lt;code&gt;
+from ultralytics import YOLO
+from common import KITTI_HEIGHT, KITTI_WIDTH
+
+model = YOLO(&amp;#39;yolov8m.pt&amp;#39;)
+model.export(
+    format=&amp;#39;onnx&amp;#39;, 
+    device=0,  # GPU device
+    imgsz=(KITTI_HEIGHT, KITTI_WIDTH),  # KITTI image size
+    half=False # we will use half precision in TensorRT step
+)
+&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+
+
+&lt;p&gt;This will generate a file named &lt;code&gt;yolov8m.onnx&lt;/code&gt; in the current directory. An important note here is that we set a static input size matching the KITTI image dimensions after padded for YOLO. This is because TensorRT performs best with fixed input sizes, as it can optimize memory allocation and kernel selection accordingly.&lt;/p&gt;
+&lt;p&gt;Once it is exported to ONNX, we can use the TensorRT API to compile the model into a TensorRT engine. After installing TensorRT, it is as simple as running the following command:&lt;/p&gt;
+
+
+
+  &lt;div class=&#34;collapsable-code&#34;&gt;
+    &lt;input id=&#34;371845629&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;371845629&#34;&gt;
+      &lt;span class=&#34;collapsable-code__language&#34;&gt;Bash&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__title&#34;&gt;Compile ONNX to TensorRT&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
+    &lt;/label&gt;
+    &lt;pre class=&#34;language-Bash&#34; &gt;&lt;code&gt;
+trtexec.exe --onnx=yolov8m.onnx --saveEngine=yolov8m.engine --fp16 --verbose
+&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+
+
+&lt;p&gt;This command uses the &lt;code&gt;trtexec&lt;/code&gt; tool provided by TensorRT to compile the ONNX model into a TensorRT engine file named &lt;code&gt;yolov8m.engine&lt;/code&gt;. The &lt;code&gt;--fp16&lt;/code&gt; flag indicates that we want to use FP16 precision for the model weights and activations.&lt;/p&gt;
+&lt;h2 id=&#34;tensorrt-inference&#34;&gt;TensorRT inference&lt;/h2&gt;
+&lt;p&gt;After compiling the model, we can load the TensorRT engine and run inference using the TensorRT runtime API. It is not as straightforward as using Pytorch, and involves a series of steps to allocate memory buffers, create execution contexts, and manage data transfers between the CPU and GPU. To handle all that, I creaated a simple wrapper class that abstracts away the low-level details and provides a clean interface for running inference.&lt;/p&gt;
+
+
+
+  &lt;div class=&#34;collapsable-code&#34;&gt;
+    &lt;input id=&#34;693281457&#34; type=&#34;checkbox&#34;  /&gt;
+    &lt;label for=&#34;693281457&#34;&gt;
+      &lt;span class=&#34;collapsable-code__language&#34;&gt;Python&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__title&#34;&gt;TensorRT Inference&lt;/span&gt;
+      &lt;span class=&#34;collapsable-code__toggle&#34; data-label-expand=&#34;Show&#34; data-label-collapse=&#34;Hide&#34;&gt;&lt;/span&gt;
+    &lt;/label&gt;
+    &lt;pre class=&#34;language-Python&#34; &gt;&lt;code&gt;
+import torch
+import tensorrt as trt
+
+class YOLOv8TensorRT:
+    def __init__(self, engine_path, device=&amp;#34;cuda&amp;#34;):
+        self.device = torch.device(device)
+        self.stream = torch.cuda.Stream(device=self.device)
+
+        # 1. Load the Engine and creating execution context
+        logger = trt.Logger(trt.Logger.WARNING)
+        with open(engine_path, &amp;#34;rb&amp;#34;) as f:
+            runtime = trt.Runtime(logger)
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        self.context = self.engine.create_execution_context()
+        
+        # 2. Identify Input/Output Tensors
+        self.input_name = self.engine.get_tensor_name(0)
+        self.output_name = self.engine.get_tensor_name(1)
+
+        # 3. Allocate GPU buffers using the detected type
+        #    it is important here that the output is float32 even if the model is compiled with --fp16
+        self.output_shape = self.engine.get_tensor_shape(self.output_name)
+        torch_dtype = torch.float32 if self.engine.get_tensor_dtype(self.output_name) == trt.float32 else torch.float16
+        self.output_buffer = torch.zeros(tuple(self.output_shape), device=self.device, dtype=torch_dtype)
+
+    def inference(self, input_tensor: torch.Tensor):        
+        # Use a context manager to ensure all torch kernels are launched in the specified stream
+        with torch.cuda.stream(self.stream):
+            # Set Tensor Addresses
+            self.context.set_tensor_address(self.input_name, input_tensor.data_ptr())
+            self.context.set_tensor_address(self.output_name, self.output_buffer.data_ptr())
+            
+            # Run Inference using the raw cuda_stream pointer
+            self.context.execute_async_v3(self.stream.cuda_stream)
+            
+            # Synchronize this stream specifically 
+            # (Allows CPU to stay ahead of other GPU tasks if needed)
+            self.stream.synchronize()
+            
+            return self.output_buffer
+
+# Usage Example
+trt_model = YOLOv8TensorRT(&amp;#39;yolov8m.engine&amp;#39;)
+results = trt_model.inference(img_tensor)
+&lt;/code&gt;&lt;/pre&gt;
+  &lt;/div&gt;
+
+
+&lt;p&gt;Ok, so how does it perform? After integrating the TensorRT inference into our perception pipeline, I re-ran the benchmarking script to measure the FPS and tracking performance. Here are the results, now all the models together to ease comparison:&lt;/p&gt;
+&lt;table&gt;
+  &lt;thead&gt;
+      &lt;tr&gt;
+          &lt;th&gt;Model&lt;/th&gt;
+          &lt;th&gt;Avg. YOLO Time (ms)&lt;/th&gt;
+          &lt;th&gt;Total Time (ms)&lt;/th&gt;
+          &lt;th&gt;FPS&lt;/th&gt;
+          &lt;th&gt;HOTA Score&lt;/th&gt;
+      &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+      &lt;tr&gt;
+          &lt;td&gt;FP32&lt;/td&gt;
+          &lt;td&gt;15.56&lt;/td&gt;
+          &lt;td&gt;19.44&lt;/td&gt;
+          &lt;td&gt;52&lt;/td&gt;
+          &lt;td&gt;57&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;FP16&lt;/td&gt;
+          &lt;td&gt;10.35&lt;/td&gt;
+          &lt;td&gt;14.00&lt;/td&gt;
+          &lt;td&gt;71&lt;/td&gt;
+          &lt;td&gt;57&lt;/td&gt;
+      &lt;/tr&gt;
+      &lt;tr&gt;
+          &lt;td&gt;TensorRT FP16&lt;/td&gt;
+          &lt;td&gt;4.11&lt;/td&gt;
+          &lt;td&gt;7.87&lt;/td&gt;
+          &lt;td&gt;127&lt;/td&gt;
+          &lt;td&gt;56&lt;/td&gt;
+      &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;As we can see, the TensorRT-optimized model achieves an average YOLO inference time of just &lt;code&gt;4.11 ms&lt;/code&gt; a ~&lt;code&gt;3.7X&lt;/code&gt; compared to our baseline FP32 and an above 2X improvement over the FP16 Pytorch model, resulting in an overall pipeline speed of &lt;code&gt;127 FPS&lt;/code&gt;. The tracking performance remains largely unchanged with a HOTA score of &lt;code&gt;56&lt;/code&gt;, indicating that the optimization did not compromise accuracy.&lt;/p&gt;
+&lt;p&gt;For the eye test, see the following gif showing the Pytorch FP32 model vs the TensorRT FP16 model running side by side, at their respective FPS:&lt;/p&gt;
+&lt;p&gt;&lt;img src=&#34;//localhost:1313/posts/images/fps_comparison.gif&#34; alt=&#34;FPS comparison GIF&#34;&gt;&lt;/p&gt;
+&lt;h1 id=&#34;conclusions-and-next-steps&#34;&gt;Conclusions and next steps&lt;/h1&gt;
+</content>
+    </item>
+    
     <item>
       <title>Road segmentation with U-Net from monocular camera</title>
       <link>//localhost:1313/posts/road-detection/</link>

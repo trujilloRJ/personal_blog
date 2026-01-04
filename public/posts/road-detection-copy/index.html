@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  
+    <title>Road segmentation with U-Net from monocular camera :: JT Blog</title>
+  
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="This post explores road segmentation using a U-Net architecture trained on monocular images from the KITTI dataset. The task focuses on identifying drivable areas from RGB inputs, a challenge due to lighting, shadows, and variable road conditions. I detail the model architecture, training strategies, and key hyperparameters such as learning rate selection and loss functions." />
+<meta name="keywords" content="computer-vision, automotive-perception, unet, deep learning" />
+<meta name="robots" content="noodp" />
+<link rel="canonical" href="//localhost:1313/posts/road-detection-copy/" />
+
+
+
+
+<link rel="stylesheet" href="//localhost:1313/assets/style.css">
+
+  <link rel="stylesheet" href="//localhost:1313/assets/green.css">
+
+
+
+
+
+
+<link rel="apple-touch-icon" href="//localhost:1313/img/apple-touch-icon-192x192.png">
+
+  <link rel="shortcut icon" href="//localhost:1313/img/favicon/green.png">
+
+
+
+<meta name="twitter:card" content="summary" />
+
+  
+    <meta name="twitter:site" content="" />
+  
+    <meta name="twitter:creator" content="" />
+
+
+
+<meta property="og:locale" content="en" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Road segmentation with U-Net from monocular camera">
+<meta property="og:description" content="This post explores road segmentation using a U-Net architecture trained on monocular images from the KITTI dataset. The task focuses on identifying drivable areas from RGB inputs, a challenge due to lighting, shadows, and variable road conditions. I detail the model architecture, training strategies, and key hyperparameters such as learning rate selection and loss functions." />
+<meta property="og:url" content="//localhost:1313/posts/road-detection-copy/" />
+<meta property="og:site_name" content="JT Blog" />
+
+  <meta property="og:image" content="//localhost:1313/">
+
+<meta property="og:image:width" content="2048">
+<meta property="og:image:height" content="1024">
+
+
+  <meta property="article:published_time" content="2025-05-10 15:06:40 &#43;0200 CEST" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"
+    onload="renderMathInElement(document.body);"></script>
+
+</head>
+<body class="green">
+
+
+<div class="container center headings--one-size">
+
+  <head>
+    
+    
+    
+</head>
+<header class="header">
+    <div class="header__inner">
+        <div class="header__logo">
+        <a href="/">
+  <div class="logo">
+    JT Blog
+  </div>
+</a>
+
+        </div>
+        
+    </div>
+    
+</header>
+  
+
+  <div class="content">
+    
+<div class="post">
+  <h1 class="post-title">
+    <a href="//localhost:1313/posts/road-detection-copy/">Road segmentation with U-Net from monocular camera</a></h1>
+  <div class="post-meta">
+    
+      <span class="post-date">
+        2025-05-10
+        
+      </span>
+    
+    
+      <span class="post-author">:: Javier Trujillo Rodriguez</span>
+    
+    
+  </div>
+
+  
+  <span class="post-tags">
+    
+    #<a href="//localhost:1313/tags/computer-vision/">computer-vision</a>&nbsp;
+    
+    #<a href="//localhost:1313/tags/opencv/">opencv</a>&nbsp;
+    
+    #<a href="//localhost:1313/tags/deep-learning/">deep-learning</a>&nbsp;
+    
+  </span>
+  
+  
+
+
+  
+
+  <div class="post-content"><div>
+        <p>Understanding where a vehicle can safely drive is essential for building autonomous driving systems. This involves segmenting lane markings, road edges, and drivable areas using inputs from sensors like cameras, LiDAR, or radar.</p>
+<p>In this post, I explore how to tackle this using just a monocular camera and a neural network based on the U-Net architecture, originally developed for medical image segmentation. Detecting drivable road surfaces from raw RGB images is challenging as the model needs to be robust to lighting variations, shadows, and road conditions. To improve the model’s ability to generalize, I used data augmentation techniques that help it handle a wider variety of scenes.</p>
+<h2 id="source-code">Source code<a href="#source-code" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<p>The source code for this post is available at: <a href="https://github.com/trujilloRJ/lane-detection">https://github.com/trujilloRJ/lane-detection</a></p>
+<h2 id="table-of-contents">Table of Contents<a href="#table-of-contents" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h2>
+<ol>
+<li><a href="/posts/road-detection-copy/#dataset">Dataset</a></li>
+<li><a href="/posts/road-detection-copy/#model-architecture">Model architecture</a></li>
+<li><a href="/posts/road-detection-copy/#training-details">Training details</a></li>
+<li><a href="/posts/road-detection-copy/#results-and-discussion">Results and discussion</a></li>
+</ol>
+<h1 id="dataset">Dataset<a href="#dataset" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>We&rsquo;re working with data from the  <a href="https://www.cvlibs.net/datasets/kitti/eval_road.php">KITTI road detection challenge</a>, a benchmark dataset designed for evaluating road scene understanding in autonomous driving. It features real-world driving scenarios captured in both urban and highway environments.</p>
+<p>Each image in the dataset comes with a corresponding binary mask that labels which pixels belong to the drivable road surface. In the example below, the road mask is overlaid in green. Notice how the mask highlights only the road intended for the ego-vehicle while excluding the opposite lane. This distinction is important: we’re not just detecting roads in general, we’re identifying where our vehicle can actually drive.</p>
+
+
+<image src="/posts/images/road_example.png" alt="Example lane" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The model outputs a pixel-wise classification map—basically, an image-sized grid where each pixel is labeled as either “road” or “not road.” In computer vision, this kind of task is called <strong>semantic segmentation</strong>. It’s a common approach not only in autonomous driving but also in fields like medical imaging, where it’s used to identify things like tumors in scans.</p>
+<p>One architecture that has consistently shown strong performance in segmentation tasks is the <a href="https://arxiv.org/abs/1505.04597">U-Net</a>. Originally developed for biomedical image segmentation, U-Net’s encoder-decoder structure with skip connections makes it well-suited for capturing both high-level context and fine-grained details. In this post, we’ll see how this architecture can be effectively applied to automotive scenes as well.</p>
+<h1 id="model-architecture">Model architecture<a href="#model-architecture" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+
+
+<image src="/posts/diagrams/UNet.png" alt="Example lane" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The figure shows the baseline architecture used for our prediction model, which is a simplified version of the U-Net. While the original U-Net includes four downsampling and upsampling blocks with a larger number of channels to handle multi-class segmentation, our version is lighter, using only three blocks and fewer channels. This reduction is sufficient for our task, as we only need to segment a single class—drivable road—rather than multiple classes.</p>
+<p>A key and innovative feature of the U-Net architecture is the use of skip connections, illustrated in the figure with dashed lines. These connections link the output of each downsampling block directly to the corresponding upsampling block in the expanding path by concatenating their feature maps. This design helps preserve spatial information that is lost during downsampling.</p>
+<h1 id="training-details">Training details<a href="#training-details" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<p>Before jumping into the results, I want to briefly go through the training process and methodology. Often, these details are overlooked in articles, and, in my opinion, they are critical to ensure good performance.</p>
+<h4 id="loss-function">Loss function<a href="#loss-function" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>To train the model effectively, we need a loss function that captures how much our predicted segmentation map differs from the ground truth. A natural starting point is the well-known Binary Cross-Entropy (BCE) loss, which works well for binary classification tasks.</p>
+<p>However, in road segmentation, we run into a common problem: class imbalance. The drivable road typically takes up a much smaller portion of the image compared to the background. As a result, BCE can produce deceptively good results just by favoring the majority class, the background.</p>
+<p>A better alternative for segmentation tasks is the Dice loss, which directly measures the overlap between the predicted road pixels and the ground truth. Mathematically, it’s a version of the Dice coefficient:</p>
+$$Dice = \frac{|X\cap Y|}{X + Y}$$<p>
+It’s particularly effective in imbalanced scenarios because it focuses on correctly predicting the minority class—in our case, the road pixels.</p>
+<p>Finally, the loss used for training is a combination of BCE and Dice, known in the literature as <strong>Combo</strong> loss:</p>
+$$L = BCE + Dice$$<h4 id="batch-size">Batch size<a href="#batch-size" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Next, we need to select an appropriate mini-batch size. Smaller batches work well with limited GPU memory but can produce noisier gradient updates and slower convergence. However, noisy gradients aren&rsquo;t always a drawback—they can improve generalization by preventing the model from overfitting, which is especially beneficial when training on a small dataset, as in our case. Larger batch sizes offer more stable gradients and faster training but require more memory and can overfit if not carefully tuned. Given our limited dataset and GPU resources, we opted for a very small batch size of <code>2</code>.</p>
+<h4 id="learning-rate">Learning rate<a href="#learning-rate" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Once the batch size is set, the next step is selecting the learning rate, arguably <a href="https://www.deeplearningbook.org/">the most important hyperparameter</a>. A common starting point is <code>3e-4</code>, known as &ldquo;Karpathy’s constant,&rdquo; popularized by Andrej Karpathy in one of his <a href="https://x.com/karpathy/status/933763912045965312">tweets</a>.</p>
+<p>However, we could use a more informed approach: the learning rate range test. Proposed by researcher Leslie Smith in his well-known <a href="https://arxiv.org/abs/1506.01186">paper</a>, this method involves starting with a very low learning rate and gradually increasing it after each batch iteration. By plotting the training loss against the learning rate, we can observe where the loss begins to decrease sharply and where it starts to rise again. The optimal learning rate typically lies just before the loss begins to increase.</p>
+
+
+<image src="/posts/images/lr_range_test.png" alt="Example lane" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The figure shows the result of the LR range test for our dataset. As observed, the training loss decreases steadily and then begins to rise sharply after a certain value around <code>0.1</code>. Based on this curve, we selected a starting learning rate of <code>1e-4</code> (very close to the empirical Karpathy&rsquo;s constant 😊), which lies just before the loss starts to diverge. This choice tries to maximize learning efficiency while maintaining training stability.</p>
+<h4 id="optimizer">Optimizer<a href="#optimizer" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>For optimization, I choose <strong>Adam</strong>. While Stochastic Gradient Descent (SGD) with momentum can outperform Adam when finely tuned, Adam is more robust to suboptimal hyperparameters and generally performs well out of the box. Since I’m not running extensive hyperparameter searches, Adam is the practical choice for this experiment.</p>
+<h4 id="scheduler">Scheduler<a href="#scheduler" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Finally, let’s talk about learning rate schedulers. For this experiment, I’m using the <strong>One-Cycle</strong> policy, introduced in the <a href="https://arxiv.org/abs/1708.07120">super convergence paper</a> by Leslie Smith. The idea is to start training with a gradually increasing learning rate (a “warm-up”), followed by a steady decrease to very low values.</p>
+<p>The intuition is that high learning rates early on help the optimizer escape sharp, narrow minima, encouraging convergence toward wider, flatter ones—which are known to generalize better. By finishing with a low learning rate, the model can fine-tune within that broad minimum, improving its robustness to unseen data. The learning rate range test give us insights to select the maximum learning rate for the One-Cycle policy. I choose <code>1e-3</code> as a sensible value before the loss starts increasing.</p>
+<p>The following table summarizes the training parameter selection:</p>
+<table>
+  <thead>
+      <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Loss</td>
+          <td>Combo (BCE + Dice)</td>
+      </tr>
+      <tr>
+          <td>Batch size</td>
+          <td>2</td>
+      </tr>
+      <tr>
+          <td>Initial learning rate</td>
+          <td>1e-4</td>
+      </tr>
+      <tr>
+          <td>Optimizer</td>
+          <td>AdamW</td>
+      </tr>
+      <tr>
+          <td>Scheduler</td>
+          <td>One-Cycle policy</td>
+      </tr>
+  </tbody>
+</table>
+<h1 id="results-and-discussion">Results and discussion<a href="#results-and-discussion" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h1>
+<h4 id="baseline-model">Baseline model<a href="#baseline-model" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Starting with a simple baseline model helps us understand the problem better and provides a foundation to improve upon. For this, we used just 2 downsampling and upsampling blocks with feature channels <code>(32, 64, 128)</code> in the contracting and expanding paths.</p>
+
+
+<image src="/posts/images/loss_fn_2d.png" alt="Loss" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The figure shows training and validation loss over epochs. Despite some noisy validation loss early on—likely due to the small batch size and one-cycle scheduler—the model converges well. The best validation loss occurs at epoch <code>65</code>, and the model parameters from this point were saved for evaluation.</p>
+<p>Loss doesn’t fully reflect model performance, we need a more interpretable metric, so we also consider precision and recall. The ROC curve below for the best model iteration shows promising results for our baseline model—with both precision and recall exceeding <code>90%</code>.</p>
+
+
+<image src="/posts/images/auc_2d.png" alt="Loss" position="center" style="border-radius: 8px; width: 400px" >
+
+
+<p>Let&rsquo;s continue with the evaluation by looking at two examples.</p>
+<p>
+
+<image src="/posts/images/good_2d.png" alt="ex00" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+
+
+<image src="/posts/images/bad_2d.png" alt="ex02" position="center" style="border-radius: 8px; width: 1200px" >
+
+</p>
+<p>The first example illustrates a scene where the network accurately predicts the drivable road. In contrast, the second example features two roads, but only one is drivable. Here, the network correctly identifies most of the drivable road but mistakenly classifies the opposite road as drivable and misses some pixels on the actual road.</p>
+<h4 id="extending-our-model">Extending our model<a href="#extending-our-model" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Let’s take it a step further by increasing the model depth—adding one more downsampling and upsampling block. This expands the feature channels to <code>(32, 64, 128, 256)</code>. The goal is that a deeper U-Net with a larger receptive field will deliver better predictions than the baseline model.</p>
+<p>The plot below compares the loss of the new deeper model against the baseline shallow one. It’s clear that the deeper model converges faster and reaches a significantly lower validation loss by epoch <code>59</code>.</p>
+
+
+<image src="/posts/images/compare_loss.png" alt="Loss" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>Performance-wise, the improvements are clear in the same example as before. The deeper model delivers a much more accurate road prediction and avoids confusing the opposite, non-drivable lane.</p>
+
+
+<image src="/posts/images/good_3d.png" alt="ex02" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>These results are also valid to the whole validation dataset with a higher ROC Area Under the Curve score:</p>
+
+
+<image src="/posts/images/compare_roc.png" alt="compare_roc" position="center" style="border-radius: 8px; width: 400px" >
+
+
+<h4 id="data-augmentation">Data augmentation<a href="#data-augmentation" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>While reviewing some challenging cases, I noticed the model struggled with variable lighting conditions that altered the road’s color from the usual appearance. This suggests the model was relying too heavily on color cues to detect roads. A good way to address this is to expand the training data with varied lighting scenarios, encouraging the model to focus more on shape than color. We can simulate this by applying data augmentation techniques.</p>
+<p>For this, I used the library <a href="https://albumentations.ai/"><strong>albumentations</strong></a> as it offers a wide range of transformations like scaling, rotation, color shifting and many more that comes handy for computer visions tasks. In adittion, it integrates easily with Pytorch. Specifically, applying random color shifting transformations to our data can help the model become more robust to varying lighting conditions and improve its generalization.</p>
+
+
+<image src="/posts/images/compare_loss_aug.png" alt="compare_aug" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+<p>The figure shows the loss evolution for the deeper model with and without data augmentation. Including augmentation leads to a slightly lower validation loss. Interestingly, the training loss at the point of lowest validation loss is higher with augmentation, indicating less overfitting and better generalization—exactly what we want from data augmentation.</p>
+<p>Here’s one of the toughest examples from the dataset. The top image shows predictions from the deeper model trained without data augmentation, while the bottom shows the same model trained with augmentation.</p>
+<p>Without augmentation, the model struggles with low recall—missing much of the drivable road, likely due to heavy shadows cast by nearby buildings. It even mistakes parts of the building for road, since the color and shape features are similar.</p>
+<p>With data augmentation, recall improves significantly, showing better robustness to lighting changes. However, the model still confuses the building for drivable road in some areas.</p>
+<p>This challenge remains open for now, but potential solutions include (i) experimenting with more diverse data augmentations and longer training, and (ii) increasing model depth to capture more complex features.</p>
+<p>
+
+<image src="/posts/images/bad_3d.png" alt="ex00" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+
+
+<image src="/posts/images/good_aug.png" alt="ex02" position="center" style="border-radius: 8px; width: 1200px" >
+
+</p>
+<h4 id="model-size">Model size<a href="#model-size" class="hanchor" ariaLabel="Anchor">&#8983;</a> </h4>
+<p>Model size and memory requirements are crucial factors, especially when deploying to platforms with limited resources or when real-time inference is needed. Our baseline &ldquo;shallow&rdquo; U-Net, using feature channels <code>(32, 64, 128)</code>, contains approximately 260K trainable parameters. In contrast, the deeper model—with an added downsampling/upsampling block and expanded channels <code>(32, 64, 128, 256)</code>—has around 1 million parameters, roughly <strong>4× larger</strong>.</p>
+<p>This difference in size has practical implications. While the deeper model offers better performance, it demands significantly more memory and computation. On edge devices or embedded systems where latency, power consumption, or memory constraints are critical, the smaller model may be preferred—even if it means sacrificing some segmentation accuracy. Choosing the right model becomes a trade-off between performance and efficiency, depending on the target deployment scenario.</p>
+<p>Here’s a final touch for some flair — a GIF showcasing the model in action on various road scenes:</p>
+
+
+<image src="/posts/images/road_detection_examples.gif" alt="examples" position="center" style="border-radius: 8px; width: 1200px" >
+
+
+
+      </div></div>
+
+  
+  
+<div class="pagination">
+    <div class="pagination__title">
+        <span class="pagination__title-h"></span>
+        <hr />
+    </div>
+    <div class="pagination__buttons">
+        
+        
+        <span class="button next">
+            <a href="//localhost:1313/posts/road-detection/">
+                <span class="button__text">Road segmentation with U-Net from monocular camera</span>
+                <span class="button__icon">→</span>
+            </a>
+        </span>
+        
+    </div>
+</div>
+
+  
+
+  
+  
+
+  
+</div>
+
+  </div>
+
+  
+    <footer class="footer">
+  <div class="footer__inner">
+    
+      <div class="copyright">
+        <span>© 2025 Powered by <a href="http://gohugo.io">Hugo</a></span>
+    
+        
+      </div>
+  </div>
+</footer>
+
+<script src="//localhost:1313/assets/main.js"></script>
+<script src="//localhost:1313/assets/prism.js"></script>
+
+
+
+
+
+
+
+  
+</div>
+
+</body>
+</html>
